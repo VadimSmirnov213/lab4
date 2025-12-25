@@ -3,6 +3,7 @@ package com.example.service
 import com.example.entity.Role
 import com.example.entity.User
 import com.example.repository.UserRepository
+import com.example.validation.UserValidator
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import java.util.*
@@ -27,7 +28,7 @@ class UserService(
     }
     
     fun hashPassword(password: String): String {
-        return requireNotNull(passwordEncoder.encode(password)) { "Password encoding failed" }
+        return passwordEncoder.encode(password)!!
     }
     
     fun findById(id: Long): Optional<User> {
@@ -39,9 +40,8 @@ class UserService(
     }
     
     fun createUser(login: String, password: String, roles: Set<Role> = setOf(Role.USER)): User {
-        if (userRepository.findByLogin(login).isPresent) {
-            throw com.example.exception.UserAlreadyExistsException("Пользователь с таким логином уже существует")
-        }
+        val existingUser = userRepository.findByLogin(login)
+        UserValidator.validateUserNotExists(existingUser)
         
         val passwordHash = hashPassword(password)
         val user = User(login = login, passwordHash = passwordHash, roles = roles)
@@ -49,34 +49,26 @@ class UserService(
     }
     
     fun deleteUser(userId: Long) {
-        if (!userRepository.existsById(userId)) {
-            throw com.example.exception.UserNotFoundException("Пользователь не найден")
-        }
+        val exists = userRepository.existsById(userId)
+        UserValidator.validateUserExistsById(exists)
         userRepository.deleteById(userId)
     }
     
     fun deleteUserByLogin(login: String) {
         val user = userRepository.findByLogin(login)
-            .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
-        userRepository.deleteById(user.id)
-    }
-    
-    fun updateUserRoles(userId: Long, roles: Set<Role>): User {
-        val user = userRepository.findById(userId)
-            .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
-        
-        val updatedUser = user.copy(roles = roles)
-        return userRepository.save(updatedUser)
+        UserValidator.validateUserExists(user)
+        userRepository.deleteById(user.get().id)
     }
     
     fun assignAnalystRoleByLogin(login: String): User {
         val user = userRepository.findByLogin(login)
-            .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
+        UserValidator.validateUserExists(user)
         
-        val updatedRoles = user.roles.toMutableSet()
+        val existingUser = user.get()
+        val updatedRoles = existingUser.roles.toMutableSet()
         updatedRoles.add(Role.ANALYST)
         
-        val updatedUser = user.copy(roles = updatedRoles)
+        val updatedUser = existingUser.copy(roles = updatedRoles)
         return userRepository.save(updatedUser)
     }
 }

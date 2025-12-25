@@ -2,7 +2,7 @@ package com.example.service
 
 import com.example.entity.Role
 import com.example.entity.User
-import com.example.exception.UserNotFoundException
+import com.example.validation.UserValidator
 import org.springframework.security.core.GrantedAuthority
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.userdetails.UserDetails
@@ -15,8 +15,9 @@ class CustomUserDetailsService(
 ) : UserDetailsService {
     
     override fun loadUserByUsername(login: String): UserDetails {
-        val user = userService.findByLogin(login)
-            .orElseThrow { UserNotFoundException("Пользователь не найден") }
+        val userOptional = userService.findByLogin(login)
+        UserValidator.validateUserExists(userOptional)
+        val user = userOptional.get()
         
         return org.springframework.security.core.userdetails.User(
             user.login,

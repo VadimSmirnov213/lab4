@@ -1,7 +1,7 @@
 package com.example.service
 
 import com.example.entity.User
-import com.example.exception.UserNotFoundException
+import com.example.validation.UserValidator
 import com.example.repository.PointRepository
 import org.springframework.stereotype.Service
 
@@ -43,8 +43,9 @@ class AnalyticsService(
     }
     
     fun getUserStatistics(userId: Long): UserStatistics {
-        val user = userService.findById(userId)
-            .orElseThrow { UserNotFoundException("Пользователь не найден") }
+        val userOptional = userService.findById(userId)
+        UserValidator.validateUserExists(userOptional)
+        val user = userOptional.get()
         
         val allPoints = pointRepository.findByUserOrderByExecutionTimeDesc(user)
         val totalPoints = allPoints.size.toLong()
@@ -65,8 +66,9 @@ class AnalyticsService(
     }
     
     fun getUserStatisticsByLogin(login: String): UserStatistics {
-        val user = userService.findByLogin(login)
-            .orElseThrow { UserNotFoundException("Пользователь не найден") }
+        val userOptional = userService.findByLogin(login)
+        UserValidator.validateUserExists(userOptional)
+        val user = userOptional.get()
         
         val allPoints = pointRepository.findByUserOrderByExecutionTimeDesc(user)
         val totalPoints = allPoints.size.toLong()

@@ -3,8 +3,8 @@ package com.example.service
 import com.example.dto.AuthResponse
 import com.example.entity.User
 import com.example.exception.UnauthorizedException
-import com.example.exception.UserNotFoundException
-import com.example.exception.ValidationException
+import com.example.validation.AuthValidator
+import com.example.validation.UserValidator
 import org.springframework.stereotype.Service
 
 @Service
@@ -14,7 +14,7 @@ class AuthService(
 ) {
     
     fun register(login: String?, password: String?): AuthResponse {
-        validateLoginAndPassword(login, password)
+        AuthValidator.validateLoginAndPassword(login, password)
         
         val user = userService.createUser(login!!, password!!)
         val token = generateToken(user)
@@ -26,7 +26,7 @@ class AuthService(
     }
     
     fun login(login: String?, password: String?): AuthResponse {
-        validateLoginAndPassword(login, password)
+        AuthValidator.validateLoginAndPassword(login, password)
         
         val user = userService.authenticate(login!!, password!!)
         
@@ -42,23 +42,15 @@ class AuthService(
         }
     }
     
-    private fun validateLoginAndPassword(login: String?, password: String?) {
-        if (login.isNullOrBlank()) {
-            throw ValidationException("Логин не может быть пустым")
-        }
-        if (password.isNullOrBlank()) {
-            throw ValidationException("Пароль не может быть пустым")
-        }
-    }
-    
     fun getCurrentUser(token: String): User {
         if (!jwtService.validateToken(token)) {
             throw UnauthorizedException("Недействительный токен")
         }
         
         val userId = jwtService.getUserIdFromToken(token)
-        return userService.findById(userId)
-            .orElseThrow { UserNotFoundException("Пользователь не найден") }
+        val user = userService.findById(userId)
+        UserValidator.validateUserExists(user)
+        return user.get()
     }
     
     fun generateToken(user: User): String {

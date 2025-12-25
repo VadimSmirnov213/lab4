@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component
 class DataInitializer(
     private val userRepository: UserRepository
 ) {
-    
+
     @PostConstruct
     fun init() {
         val adminPasswordHash = "\$2a\$10\$3yBVJx7011txOF/RU4p1FeLs3EkFD29a2OIyNcAjrrIo4br5D2tYS"
@@ -19,7 +19,7 @@ class DataInitializer(
             val admin = User(
                 login = "admin",
                 passwordHash = adminPasswordHash,
-                roles = setOf(Role.ADMIN)
+                roles = setOf(Role.ADMIN) 
             )
             userRepository.save(admin)
         }
