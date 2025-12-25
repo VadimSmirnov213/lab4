@@ -32,18 +32,5 @@ class AuthController(
             authService.login(request.login!!, request.password!!)
         )
     }
-    
-    @GetMapping("/check")
-    fun checkAuth(authentication: Authentication?): ResponseEntity<Map<String, Any>> {
-        return if (authentication != null && authentication.isAuthenticated) {
-            val user = authentication.principal as com.example.entity.User
-            ResponseEntity.ok(mapOf(
-                "authenticated" to true,
-                "login" to user.login
-            ))
-        } else {
-            ResponseEntity.status(401).body(mapOf("authenticated" to false))
-        }
-    }
 }
 

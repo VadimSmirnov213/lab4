@@ -37,9 +37,4 @@ class PointController(
         pointService.deletePointsByUser(authentication)
         return ResponseEntity.ok(mapOf("message" to "Точки удалены"))
     }
-
-    @GetMapping("/health")
-    fun health(): ResponseEntity<Map<String, String>> {
-        return ResponseEntity.ok(mapOf("status" to "ok"))
-    }
 }
