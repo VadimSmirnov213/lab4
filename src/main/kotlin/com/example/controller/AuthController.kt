@@ -1,65 +1,45 @@
 package com.example.controller
 
 import com.example.dto.LoginRequest
+import com.example.dto.RegisterRequest
 import com.example.service.AuthService
-import com.example.service.UserService
-import jakarta.servlet.http.HttpSession
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
-import org.springframework.validation.BindingResult
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(originPatterns = ["*"], allowCredentials = "true")
 class AuthController(
-    private val userService: UserService,
     private val authService: AuthService
 ) {
 
+    @PostMapping("/register")
+    fun register(
+        @Valid @RequestBody request: RegisterRequest
+    ): ResponseEntity<com.example.dto.AuthResponse> {
+        return ResponseEntity.ok(
+            authService.register(request.login!!, request.password!!)
+        )
+    }
+
     @PostMapping("/login")
     fun login(
-        @Valid @RequestBody request: LoginRequest,
-        bindingResult: BindingResult,
-        session: HttpSession
-    ): ResponseEntity<Any> {
-        if (bindingResult.hasErrors()) {
-            val errors = bindingResult.fieldErrors.associate { it.field to it.defaultMessage }
-            return ResponseEntity.badRequest().body(mapOf("errors" to errors))
-        }
-
-        val login = request.login!!
-        val password = request.password!!
-        
-        val user = userService.authenticate(login, password)
-        
-        if (user.isPresent) {
-            authService.setUserSession(session, user.get())
-            return ResponseEntity.ok(mapOf(
-                "success" to true,
-                "message" to "Вход выполнен успешно"
-            ))
-        } else {
-            return ResponseEntity.status(401).body(mapOf(
-                "success" to false,
-                "message" to "Неверный логин или пароль"
-            ))
-        }
-    }
-    
-    @PostMapping("/logout")
-    fun logout(session: HttpSession): ResponseEntity<Map<String, String>> {
-        authService.clearSession(session)
-        return ResponseEntity.ok(mapOf("message" to "Выход выполнен успешно"))
+        @Valid @RequestBody request: LoginRequest
+    ): ResponseEntity<com.example.dto.AuthResponse> {
+        return ResponseEntity.ok(
+            authService.login(request.login!!, request.password!!)
+        )
     }
     
     @GetMapping("/check")
-    fun checkAuth(session: HttpSession): ResponseEntity<Any> {
-        val isAuthenticated = authService.isAuthenticated(session)
-        return if (isAuthenticated) {
+    fun checkAuth(authentication: Authentication?): ResponseEntity<Map<String, Any>> {
+        return if (authentication != null && authentication.isAuthenticated) {
+            val user = authentication.principal as com.example.entity.User
             ResponseEntity.ok(mapOf(
                 "authenticated" to true,
-                "login" to session.getAttribute("userLogin")
+                "login" to user.login
             ))
         } else {
             ResponseEntity.status(401).body(mapOf("authenticated" to false))

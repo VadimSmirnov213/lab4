@@ -32,5 +32,15 @@ class UserService(
     fun findById(id: Long): Optional<User> {
         return userRepository.findById(id)
     }
+    
+    fun createUser(login: String, password: String): User {
+        if (userRepository.findByLogin(login).isPresent) {
+            throw com.example.exception.UserAlreadyExistsException("Пользователь с таким логином уже существует")
+        }
+        
+        val passwordHash = hashPassword(password)
+        val user = User(login = login, passwordHash = passwordHash)
+        return userRepository.save(user)
+    }
 }
 

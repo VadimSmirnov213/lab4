@@ -7,7 +7,24 @@
 
     <main class="login-main">
       <div class="login-form-container">
-        <form @submit.prevent="handleLogin" class="login-form">
+        <div class="tabs">
+          <button 
+            @click="isLogin = true" 
+            :class="{ active: isLogin }"
+            class="tab-button"
+          >
+            Вход
+          </button>
+          <button 
+            @click="isLogin = false" 
+            :class="{ active: !isLogin }"
+            class="tab-button"
+          >
+            Регистрация
+          </button>
+        </div>
+
+        <form @submit.prevent="isLogin ? handleLogin() : handleRegister()" class="login-form">
           <div class="input-group">
             <label for="login-input">Логин:</label>
             <input
@@ -33,7 +50,7 @@
           <div class="error-message" v-if="error">{{ error }}</div>
 
           <button type="submit" class="login-button">
-            Войти
+            {{ isLogin ? 'Войти' : 'Зарегистрироваться' }}
           </button>
         </form>
       </div>
@@ -52,10 +69,20 @@ export default {
     return {
       login: '',
       password: '',
-      error: ''
+      error: '',
+      isLogin: true
     }
   },
   methods: {
+    getAuthToken() {
+      return localStorage.getItem('authToken')
+    },
+    setAuthToken(token) {
+      localStorage.setItem('authToken', token)
+    },
+    clearAuthToken() {
+      localStorage.removeItem('authToken')
+    },
     async handleLogin() {
       this.error = ''
       
@@ -70,7 +97,6 @@ export default {
           headers: {
             'Content-Type': 'application/json',
           },
-          credentials: 'include',
           body: JSON.stringify({
             login: this.login,
             password: this.password
@@ -79,16 +105,66 @@ export default {
 
         if (!response.ok) {
           const errorData = await response.json()
-          this.error = errorData.errors ? Object.values(errorData.errors).join(', ') : 'Ошибка входа'
+          this.error = errorData.errors ? Object.values(errorData.errors).join(', ') : (errorData.message || 'Ошибка входа')
           return
         }
 
         const result = await response.json()
         
-        if (result.success) {
+        if (result.success && result.token) {
+          this.setAuthToken(result.token)
           this.$router.push('/main')
         } else {
           this.error = result.message || 'Ошибка входа'
+        }
+      } catch (error) {
+        console.error('Ошибка при отправке запроса:', error)
+        this.error = 'Ошибка подключения к серверу. Убедитесь, что бэкенд запущен на http://localhost:8080'
+      }
+    },
+    async handleRegister() {
+      this.error = ''
+      
+      if (!this.login || !this.password) {
+        this.error = 'Заполните все поля'
+        return
+      }
+
+      if (this.login.length < 3 || this.login.length > 50) {
+        this.error = 'Логин должен быть от 3 до 50 символов'
+        return
+      }
+
+      if (this.password.length < 3 || this.password.length > 100) {
+        this.error = 'Пароль должен быть от 3 до 100 символов'
+        return
+      }
+
+      try {
+        const response = await fetch('http://localhost:8080/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            login: this.login,
+            password: this.password
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          this.error = errorData.errors ? Object.values(errorData.errors).join(', ') : (errorData.message || 'Ошибка регистрации')
+          return
+        }
+
+        const result = await response.json()
+        
+        if (result.success && result.token) {
+          this.setAuthToken(result.token)
+          this.$router.push('/main')
+        } else {
+          this.error = result.message || 'Ошибка регистрации'
         }
       } catch (error) {
         console.error('Ошибка при отправке запроса:', error)
@@ -144,6 +220,34 @@ export default {
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   width: 100%;
   max-width: 400px;
+}
+
+.tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #ddd;
+}
+
+.tab-button {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+.tab-button.active {
+  color: #8b5a9f;
+  border-bottom-color: #8b5a9f;
+}
+
+.tab-button:hover {
+  color: #8b5a9f;
 }
 
 .login-form {

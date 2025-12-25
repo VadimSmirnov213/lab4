@@ -1,18 +1,18 @@
 package com.example.service
 
 import com.example.dto.PointDto
+import com.example.entity.User
 import com.example.mapper.PointMapper
 import com.example.repository.PointRepository
 import com.example.validation.PointValidator
-import jakarta.servlet.http.HttpSession
+import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
 @Service
 class PointService(
-    private val pointRepository: PointRepository,
-    private val authService: AuthService
+    private val pointRepository: PointRepository
 ) {
 
     fun checkPointInArea(x: Double, y: Double, r: Double): Boolean {
@@ -38,11 +38,14 @@ class PointService(
         return checkPointInArea(x, y, r)
     }
     
+    private fun getCurrentUser(authentication: Authentication): User {
+        return authentication.principal as User
+    }
 
     @Transactional
-    fun checkAndSavePoint(dto: PointDto, session: HttpSession): PointDto {
+    fun checkAndSavePoint(dto: PointDto, authentication: Authentication): PointDto {
         PointValidator.validate(dto)
-        val user = authService.getCurrentUser(session)
+        val user = getCurrentUser(authentication)
         val hit = calculateHit(dto)
         val executionTime = LocalDateTime.now()
         val point = PointMapper.toEntity(dto, user, hit, executionTime)
@@ -52,16 +55,16 @@ class PointService(
     }
     
 
-    fun getPointsByUser(session: HttpSession): List<PointDto> {
-        val user = authService.getCurrentUser(session)
+    fun getPointsByUser(authentication: Authentication): List<PointDto> {
+        val user = getCurrentUser(authentication)
         val points = pointRepository.findByUserOrderByExecutionTimeDesc(user)
         return PointMapper.toDtoList(points)
     }
     
 
     @Transactional
-    fun deletePointsByUser(session: HttpSession) {
-        val user = authService.getCurrentUser(session)
+    fun deletePointsByUser(authentication: Authentication) {
+        val user = getCurrentUser(authentication)
         pointRepository.deleteByUser(user)
     }
 }

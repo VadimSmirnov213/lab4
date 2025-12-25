@@ -2,8 +2,8 @@ package com.example.controller
 
 import com.example.dto.PointDto
 import com.example.service.PointService
-import jakarta.servlet.http.HttpSession
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -16,21 +16,21 @@ class PointController(
     @PostMapping("/check")
     fun checkPoint(
         @RequestBody dto: PointDto,
-        session: HttpSession
+        authentication: Authentication
     ): ResponseEntity<PointDto> {
-        val result = pointService.checkAndSavePoint(dto, session)
+        val result = pointService.checkAndSavePoint(dto, authentication)
         return ResponseEntity.ok(result)
     }
     
     @GetMapping("/points")
-    fun getPoints(session: HttpSession): ResponseEntity<List<PointDto>> {
-        val points = pointService.getPointsByUser(session)
+    fun getPoints(authentication: Authentication): ResponseEntity<List<PointDto>> {
+        val points = pointService.getPointsByUser(authentication)
         return ResponseEntity.ok(points)
     }
 
     @DeleteMapping("/points")
-    fun deletePoints(session: HttpSession): ResponseEntity<Map<String, String>> {
-        pointService.deletePointsByUser(session)
+    fun deletePoints(authentication: Authentication): ResponseEntity<Map<String, String>> {
+        pointService.deletePointsByUser(authentication)
         return ResponseEntity.ok(mapOf("message" to "Точки удалены"))
     }
 

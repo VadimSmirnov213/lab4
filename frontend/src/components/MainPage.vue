@@ -119,11 +119,33 @@ export default {
     await this.loadPoints()
   },
   methods: {
+    getAuthToken() {
+      return localStorage.getItem('authToken')
+    },
+    clearAuthToken() {
+      localStorage.removeItem('authToken')
+    },
+    getAuthHeaders() {
+      const token = this.getAuthToken()
+      const headers = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      return headers
+    },
     async loadPoints() {
+      const token = this.getAuthToken()
+      if (!token) {
+        this.$router.push('/')
+        return
+      }
+
       try {
         const response = await fetch('http://localhost:8080/api/points', {
           method: 'GET',
-          credentials: 'include'
+          headers: this.getAuthHeaders()
         })
 
         if (response.ok) {
@@ -151,6 +173,7 @@ export default {
             hit: point.hit
           }))
         } else if (response.status === 401) {
+          this.clearAuthToken()
           this.$router.push('/')
         }
       } catch (error) {
@@ -162,13 +185,17 @@ export default {
       
       this.serverError = null
       
+      const token = this.getAuthToken()
+      if (!token) {
+        this.serverError = 'Требуется авторизация. Пожалуйста, войдите в систему.'
+        this.$router.push('/')
+        return
+      }
+
       try {
         const response = await fetch('http://localhost:8080/api/check', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
+          headers: this.getAuthHeaders(),
           body: JSON.stringify({
             x: Number(this.x),
             y: Number(this.y),
@@ -190,6 +217,8 @@ export default {
             }
           } catch (e) {
             if (response.status === 401) {
+              this.clearAuthToken()
+              this.$router.push('/')
               errorMessage = 'Требуется авторизация. Пожалуйста, войдите в систему.'
             } else if (response.status === 400) {
               errorMessage = 'Некорректные данные'
@@ -236,19 +265,18 @@ export default {
     },
     async goBack() {
       try {
-        await fetch('http://localhost:8080/api/points', {
-          method: 'DELETE',
-          credentials: 'include'
-        })
-        
-        await fetch('http://localhost:8080/api/auth/logout', {
-          method: 'POST',
-          credentials: 'include'
-        })
+        const token = this.getAuthToken()
+        if (token) {
+          await fetch('http://localhost:8080/api/points', {
+            method: 'DELETE',
+            headers: this.getAuthHeaders()
+          })
+        }
       } catch (error) {
         console.error('Ошибка при выходе:', error)
       }
       
+      this.clearAuthToken()
       this.results = []
       this.points = []
       this.x = null

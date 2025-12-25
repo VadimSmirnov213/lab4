@@ -11,7 +11,15 @@ const routes = [
   {
     path: '/main',
     name: 'Main',
-    component: MainPage
+    component: MainPage,
+    beforeEnter: (to, from, next) => {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        next('/')
+      } else {
+        next()
+      }
+    }
   }
 ]
 

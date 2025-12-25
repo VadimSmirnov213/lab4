@@ -1,0 +1,17 @@
+spring.application.name=demo
+
+# Oracle Database Configuration
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:XE
+spring.datasource.username=system
+spring.datasource.password=your_password
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+
+# JPA Configuration
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.OracleDialect
+spring.jpa.properties.hibernate.format_sql=true
+
+# JWT Configuration
+jwt.secret=mySecretKeyForJWTTokenGenerationThatIsAtLeast256BitsLongForSecurity
+jwt.expiration=86400000
