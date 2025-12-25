@@ -63,4 +63,37 @@ class AnalyticsService(
             hitPercentage = hitPercentage
         )
     }
+    
+    fun getUserStatisticsByLogin(login: String): UserStatistics {
+        val user = userService.findByLogin(login)
+            .orElseThrow { UserNotFoundException("Пользователь не найден") }
+        
+        val allPoints = pointRepository.findByUserOrderByExecutionTimeDesc(user)
+        val totalPoints = allPoints.size.toLong()
+        val hitPoints = allPoints.count { it.hit }.toLong()
+        val hitPercentage = if (totalPoints > 0) {
+            (hitPoints.toDouble() / totalPoints.toDouble()) * 100.0
+        } else {
+            0.0
+        }
+        
+        return UserStatistics(
+            userId = user.id,
+            login = user.login,
+            totalPoints = totalPoints,
+            hitPoints = hitPoints,
+            hitPercentage = hitPercentage
+        )
+    }
+    
+    fun getAllUsers(): List<Map<String, Any>> {
+        val users = userService.findAll()
+        return users.map { user ->
+            mapOf(
+                "id" to user.id,
+                "login" to user.login,
+                "roles" to user.roles.map { it.name }
+            )
+        }
+    }
 }

@@ -55,11 +55,28 @@ class UserService(
         userRepository.deleteById(userId)
     }
     
+    fun deleteUserByLogin(login: String) {
+        val user = userRepository.findByLogin(login)
+            .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
+        userRepository.deleteById(user.id)
+    }
+    
     fun updateUserRoles(userId: Long, roles: Set<Role>): User {
         val user = userRepository.findById(userId)
             .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
         
         val updatedUser = user.copy(roles = roles)
+        return userRepository.save(updatedUser)
+    }
+    
+    fun assignAnalystRoleByLogin(login: String): User {
+        val user = userRepository.findByLogin(login)
+            .orElseThrow { com.example.exception.UserNotFoundException("Пользователь не найден") }
+        
+        val updatedRoles = user.roles.toMutableSet()
+        updatedRoles.add(Role.ANALYST)
+        
+        val updatedUser = user.copy(roles = updatedRoles)
         return userRepository.save(updatedUser)
     }
 }

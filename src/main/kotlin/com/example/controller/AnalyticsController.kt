@@ -14,15 +14,15 @@ class AnalyticsController(
     
     @PreAuthorize("hasRole('ANALYST')")
     @GetMapping("/users")
-    fun getAllUsersStatistics(): ResponseEntity<List<com.example.service.UserStatistics>> {
-        val statistics = analyticsService.getAllUsersStatistics()
-        return ResponseEntity.ok(statistics)
+    fun getAllUsers(): ResponseEntity<List<Map<String, Any>>> {
+        val users = analyticsService.getAllUsers()
+        return ResponseEntity.ok(users)
     }
     
     @PreAuthorize("hasRole('ANALYST')")
-    @GetMapping("/users/{userId}")
-    fun getUserStatistics(@PathVariable userId: Long): ResponseEntity<com.example.service.UserStatistics> {
-        val statistics = analyticsService.getUserStatistics(userId)
+    @GetMapping("/users/{login}/statistics")
+    fun getUserStatisticsByLogin(@PathVariable login: String): ResponseEntity<com.example.service.UserStatistics> {
+        val statistics = analyticsService.getUserStatisticsByLogin(login)
         return ResponseEntity.ok(statistics)
     }
 }

@@ -16,21 +16,6 @@ class RoleRequestController(
 ) {
     
     @PreAuthorize("hasRole('USER')")
-    @PostMapping("/analyst")
-    fun requestAnalystRole(authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        val user = authentication.principal as User
-        
-        val request = roleRequestService.createRequest(user, Role.ANALYST)
-        
-        return ResponseEntity.ok(mapOf(
-            "id" to request.id,
-            "message" to "Запрос на получение роли ANALYST отправлен",
-            "status" to request.status.name,
-            "createdAt" to request.createdAt
-        ))
-    }
-    
-    @PreAuthorize("hasRole('USER')")
     @GetMapping("/my")
     fun getMyRequests(authentication: Authentication): ResponseEntity<List<Map<String, Any>>> {
         val user = authentication.principal as User
