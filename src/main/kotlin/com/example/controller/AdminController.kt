@@ -17,7 +17,7 @@ class AdminController(
     
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/users/{login}")
-    fun deleteUserByLogin(
+    fun deleteUserByLogin( 
         @PathVariable login: String,
         authentication: Authentication
     ): ResponseEntity<Map<String, String>> {

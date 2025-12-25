@@ -4,6 +4,7 @@ import com.example.dto.AuthResponse
 import com.example.entity.User
 import com.example.exception.UnauthorizedException
 import com.example.exception.UserNotFoundException
+import com.example.exception.ValidationException
 import org.springframework.stereotype.Service
 
 @Service
@@ -12,8 +13,10 @@ class AuthService(
     private val jwtService: JwtService
 ) {
     
-    fun register(login: String, password: String): AuthResponse {
-        val user = userService.createUser(login, password)
+    fun register(login: String?, password: String?): AuthResponse {
+        validateLoginAndPassword(login, password)
+        
+        val user = userService.createUser(login!!, password!!)
         val token = generateToken(user)
         return AuthResponse(
             success = true,
@@ -22,8 +25,10 @@ class AuthService(
         )
     }
     
-    fun login(login: String, password: String): AuthResponse {
-        val user = userService.authenticate(login, password)
+    fun login(login: String?, password: String?): AuthResponse {
+        validateLoginAndPassword(login, password)
+        
+        val user = userService.authenticate(login!!, password!!)
         
         return if (user.isPresent) {
             val token = generateToken(user.get())
@@ -34,6 +39,15 @@ class AuthService(
             )
         } else {
             throw UnauthorizedException("Неверный логин или пароль")
+        }
+    }
+    
+    private fun validateLoginAndPassword(login: String?, password: String?) {
+        if (login.isNullOrBlank()) {
+            throw ValidationException("Логин не может быть пустым")
+        }
+        if (password.isNullOrBlank()) {
+            throw ValidationException("Пароль не может быть пустым")
         }
     }
     

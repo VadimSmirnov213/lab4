@@ -3,9 +3,7 @@ package com.example.controller
 import com.example.dto.LoginRequest
 import com.example.dto.RegisterRequest
 import com.example.service.AuthService
-import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -17,19 +15,19 @@ class AuthController(
 
     @PostMapping("/register")
     fun register(
-        @Valid @RequestBody request: RegisterRequest
+        @RequestBody request: RegisterRequest
     ): ResponseEntity<com.example.dto.AuthResponse> {
         return ResponseEntity.ok(
-            authService.register(request.login!!, request.password!!)
+            authService.register(request.login, request.password)
         )
     }
 
     @PostMapping("/login")
     fun login(
-        @Valid @RequestBody request: LoginRequest
+        @RequestBody request: LoginRequest
     ): ResponseEntity<com.example.dto.AuthResponse> {
         return ResponseEntity.ok(
-            authService.login(request.login!!, request.password!!)
+            authService.login(request.login, request.password)
         )
     }
 }
