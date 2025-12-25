@@ -14,6 +14,15 @@ data class User(
     val login: String,
     
     @Column(nullable = false)
-    val passwordHash: String
+    val passwordHash: String,
+    
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+        name = "user_roles",
+        joinColumns = [JoinColumn(name = "user_id")]
+    )
+    @Column(name = "role")
+    @Enumerated(EnumType.STRING)
+    val roles: Set<Role> = setOf(Role.USER)
 )
 

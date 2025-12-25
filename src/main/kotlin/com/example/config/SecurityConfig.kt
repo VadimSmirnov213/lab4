@@ -2,6 +2,7 @@ package com.example.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -16,6 +17,7 @@ import org.springframework.web.filter.CorsFilter
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 class SecurityConfig(
     @Lazy private val jwtAuthenticationFilter: JwtAuthenticationFilter
 ) {
@@ -29,6 +31,7 @@ class SecurityConfig(
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
             .csrf { it.disable() }
+            .cors { cors -> cors.configurationSource(corsConfigurationSource()) }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests { auth ->
@@ -40,19 +43,24 @@ class SecurityConfig(
     }
     
     @Bean
-    fun corsFilter(): CorsFilter {
+    fun corsConfigurationSource(): org.springframework.web.cors.CorsConfigurationSource {
         val source = UrlBasedCorsConfigurationSource()
         val config = CorsConfiguration()
         
         config.allowedOriginPatterns = listOf("*")
-        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
-        config.allowedHeaders = listOf("Authorization", "Content-Type", "X-Requested-With")
-        config.exposedHeaders = listOf("Authorization")
+        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+        config.allowedHeaders = listOf("*")
+        config.exposedHeaders = listOf("Authorization", "Content-Type")
         config.allowCredentials = true
         config.maxAge = 3600L
         
         source.registerCorsConfiguration("/**", config)
-        return CorsFilter(source)
+        return source
+    }
+    
+    @Bean
+    fun corsFilter(): CorsFilter {
+        return CorsFilter(corsConfigurationSource())
     }
 }
 
