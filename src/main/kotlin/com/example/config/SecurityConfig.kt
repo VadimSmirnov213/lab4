@@ -36,7 +36,7 @@ class SecurityConfig(
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/api/auth/register", "/api/auth/login", "/api/health").permitAll()
+                    .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
                     .anyRequest().authenticated()
             }
         return http.build()
@@ -48,7 +48,7 @@ class SecurityConfig(
         val config = CorsConfiguration()
         
         config.allowedOriginPatterns = listOf("*")
-        config.allowedMethods = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+        config.allowedMethods = listOf("GET", "POST", "DELETE", "PATCH")
         config.allowedHeaders = listOf("*")
         config.exposedHeaders = listOf("Authorization", "Content-Type")
         config.allowCredentials = true
