@@ -28,7 +28,7 @@ class UserService(
     }
     
     fun hashPassword(password: String): String {
-        return passwordEncoder.encode(password)!!
+        return passwordEncoder.encode(password)!! 
     }
     
     fun findById(id: Long): Optional<User> {

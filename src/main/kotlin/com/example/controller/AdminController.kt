@@ -21,7 +21,6 @@ class AdminController(
         @PathVariable login: String,
         authentication: Authentication
     ): ResponseEntity<Map<String, String>> {
-        // Защита: админ не может удалить сам себя
         val currentUser = authentication.principal as User
         if (currentUser.login == login) {
             throw ValidationException("Нельзя удалить самого себя")

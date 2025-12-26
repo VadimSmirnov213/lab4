@@ -187,8 +187,8 @@ export default {
       
       const token = this.getAuthToken()
       if (!token) {
-        this.serverError = 'Требуется авторизация. Пожалуйста, войдите в систему.'
-        this.$router.push('/')
+        this.serverError = 'Требуется авторизация.'
+        this.$router.push('/') 
         return
       }
 
@@ -219,7 +219,7 @@ export default {
             if (response.status === 401) {
               this.clearAuthToken()
               this.$router.push('/')
-              errorMessage = 'Требуется авторизация. Пожалуйста, войдите в систему.'
+              errorMessage = 'Требуется авторизация.'
             } else if (response.status === 400) {
               errorMessage = 'Некорректные данные'
             } else {
