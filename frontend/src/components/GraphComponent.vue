@@ -140,13 +140,16 @@ export default {
     handleClick(event) {
       if (!this.r || this.r === 0) return
       
-      const rect = event.currentTarget.getBoundingClientRect()
-      const x = event.clientX - rect.left
-      const y = event.clientY - rect.top
+      const svg = event.currentTarget
+      const point = svg.createSVGPoint()
+      point.x = event.clientX
+      point.y = event.clientY
+      
+      const svgPoint = point.matrixTransform(svg.getScreenCTM().inverse())
       
       const pixelsPerUnit = this.scale(1)
-      const graphX = (x - 150) / pixelsPerUnit
-      const graphY = (150 - y) / pixelsPerUnit
+      const graphX = (svgPoint.x - 150) / pixelsPerUnit
+      const graphY = (150 - svgPoint.y) / pixelsPerUnit
       
       const roundedX = Math.round(graphX * 100) / 100
       const roundedY = Math.round(graphY * 100) / 100

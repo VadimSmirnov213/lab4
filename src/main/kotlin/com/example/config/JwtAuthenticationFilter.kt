@@ -30,21 +30,18 @@ class JwtAuthenticationFilter(
             try {
                 if (authService.validateToken(token)) {
                     val login = authService.getLoginFromToken(token)
-                    // Загружаем User с актуальными ролями из БД
                     val user = authService.getCurrentUser(token)
-                    // Загружаем UserDetails для получения authorities
                     val userDetails = userDetailsService.loadUserByUsername(login)
                     
                     val authentication = UsernamePasswordAuthenticationToken(
-                        user,  // Передаем User в principal для совместимости
+                        user,  
                         null,
-                        userDetails.authorities  // Роли для RBAC
+                        userDetails.authorities 
                     )
                     authentication.details = WebAuthenticationDetailsSource().buildDetails(request)
                     SecurityContextHolder.getContext().authentication = authentication
                 }
             } catch (e: Exception) {
-                // Токен невалиден, продолжаем без аутентификации
                 SecurityContextHolder.clearContext()
             }
         }

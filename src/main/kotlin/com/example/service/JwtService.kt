@@ -14,7 +14,7 @@ class JwtService {
     @Value("\${jwt.secret:mySecretKeyForJWTTokenGenerationThatIsAtLeast256BitsLong}")
     private lateinit var secret: String
     
-    @Value("\${jwt.expiration:86400000}") // 24 часа по умолчанию
+    @Value("\${jwt.expiration:86400000}") 
     private var expiration: Long = 86400000
     
     private fun getSigningKey(): SecretKey {
