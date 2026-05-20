@@ -89,3 +89,59 @@ def test_cpu_mmio_output_data() -> None:
     cpu.run()
 
     assert cpu.output_buffer == [ord("Z")]
+
+
+def test_cpu_interrupt_schedule_enters_handler_and_returns() -> None:
+    source = """
+    .org 0
+    irq_handler:
+        LD %R7, %R6
+        IRET
+
+    .org 4
+    _start:
+        ADD %R1, %R1, %R1
+        HLT
+    """
+    words = assemble_to_words(source)
+    cpu = CPU(
+        memory=words,
+        interrupt_schedule=[(0, ord("Q"))],
+        interrupt_vector_addr=0,
+    )
+    cpu.ip = 4
+    cpu.regs[6] = MMIO_IN_DATA
+
+    cpu.run()
+
+    assert cpu.regs[7] == ord("Q")
+    assert cpu.halted
+    assert any(log.opcode == "IRQ_ENTER" for log in cpu.logs)
+    assert any(log.opcode == "IRET" for log in cpu.logs)
+
+
+def test_cpu_interrupt_not_nested_and_delivered_later() -> None:
+    source = """
+    .org 0
+    irq_handler:
+        LD %R7, %R6
+        IRET
+
+    .org 4
+    _start:
+        HLT
+    """
+    words = assemble_to_words(source)
+    cpu = CPU(
+        memory=words,
+        interrupt_schedule=[(0, ord("A")), (1, ord("B"))],
+        interrupt_vector_addr=0,
+    )
+    cpu.ip = 4
+    cpu.regs[6] = MMIO_IN_DATA
+
+    cpu.step()  # IRQ_ENTER
+    cpu.step()  # LD in handler (A)
+    cpu.step()  # IRET
+    assert cpu.regs[7] == ord("A")
+    assert cpu.pending_irq_values == [ord("B")]

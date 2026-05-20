@@ -176,10 +176,10 @@ def _to_instruction(
     labels: dict[str, int],
     constants: dict[str, int],
 ) -> Instruction:
-    if op == "HLT":
+    if op in {"HLT", "IRET"}:
         if args:
-            raise ValueError("HLT takes no arguments")
-        return Instruction(opcode=Opcode.HLT)
+            raise ValueError(f"{op} takes no arguments")
+        return Instruction(opcode=Opcode[op])
 
     if op in {"ADD", "SUB"}:
         if len(args) != 3:

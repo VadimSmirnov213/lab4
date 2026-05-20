@@ -19,6 +19,7 @@ class Opcode(IntEnum):
     BEQ = 0x05
     JMP = 0x06
     TRAP = 0x07
+    IRET = 0x08
 
 
 @dataclass(frozen=True)

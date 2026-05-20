@@ -83,3 +83,13 @@ def test_assemble_returns_listing_entries() -> None:
     assert len(result.listing_entries) == 2
     assert result.listing_entries[0].addr == 0
     assert result.listing_entries[1].addr == 1
+
+
+def test_assemble_iret_instruction() -> None:
+    words = assemble_to_words(
+        """
+        _start:
+            IRET
+        """
+    )
+    assert words == [encode(Instruction(opcode=Opcode.IRET))]
