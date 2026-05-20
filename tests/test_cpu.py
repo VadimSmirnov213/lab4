@@ -1,5 +1,5 @@
 from src.assembler import assemble_to_words
-from src.cpu import CPU
+from src.cpu import CPU, MMIO_IN_DATA, MMIO_IN_STATUS, MMIO_OUT_DATA
 from src.isa import Instruction, Opcode, encode
 
 
@@ -58,3 +58,34 @@ def test_cpu_with_assembler_integration() -> None:
     assert cpu.regs[2] == 42
     assert cpu.halted
     assert cpu.tick == 3
+
+
+def test_cpu_mmio_input_status_and_data() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.LD, rd=1, rs1=0)),
+        encode(Instruction(opcode=Opcode.LD, rd=2, rs1=3)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words, input_bytes=b"A")
+    cpu.regs[0] = MMIO_IN_STATUS
+    cpu.regs[3] = MMIO_IN_DATA
+
+    cpu.run()
+
+    assert cpu.regs[1] == 1
+    assert cpu.regs[2] == ord("A")
+    assert len(cpu.input_buffer) == 0
+
+
+def test_cpu_mmio_output_data() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.ST, rd=0, rs1=1)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[0] = MMIO_OUT_DATA
+    cpu.regs[1] = ord("Z")
+
+    cpu.run()
+
+    assert cpu.output_buffer == [ord("Z")]

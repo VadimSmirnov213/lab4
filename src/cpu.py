@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 
 from __future__ import annotations
 
@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.isa import Opcode, decode, word_from_bytes
+
+MMIO_IN_DATA = 0xFF00
+MMIO_IN_STATUS = 0xFF01
+MMIO_OUT_DATA = 0xFF02
 
 
 @dataclass(frozen=True)
@@ -18,7 +22,7 @@ class TickLog:
 
 
 class CPU:
-    def __init__(self, memory: list[int] | None = None) -> None:
+    def __init__(self, memory: list[int] | None = None, input_bytes: bytes | None = None) -> None:
         self.memory: list[int] = list(memory or [])
         self.regs: list[int] = [0] * 8
         self.ip: int = 0
@@ -26,6 +30,8 @@ class CPU:
         self.halted: bool = False
         self.last_trap: int | None = None
         self.logs: list[TickLog] = []
+        self.input_buffer: list[int] = list(input_bytes or b"")
+        self.output_buffer: list[int] = []
 
     def _ensure_addr(self, addr: int) -> None:
         if addr < 0:
@@ -33,11 +39,35 @@ class CPU:
         if addr >= len(self.memory):
             self.memory.extend([0] * (addr - len(self.memory) + 1))
 
+    def _read_mmio(self, addr: int) -> int | None:
+        if addr == MMIO_IN_DATA:
+            if self.input_buffer:
+                return self.input_buffer.pop(0) & 0xFF
+            return 0
+        if addr == MMIO_IN_STATUS:
+            return 1 if self.input_buffer else 0
+        if addr == MMIO_OUT_DATA:
+            return 0
+        return None
+
+    def _write_mmio(self, addr: int, value: int) -> bool:
+        if addr == MMIO_OUT_DATA:
+            self.output_buffer.append(value & 0xFF)
+            return True
+        if addr in {MMIO_IN_DATA, MMIO_IN_STATUS}:
+            return True
+        return False
+
     def _read_mem(self, addr: int) -> int:
+        mmio_value = self._read_mmio(addr)
+        if mmio_value is not None:
+            return mmio_value
         self._ensure_addr(addr)
         return self.memory[addr] & 0xFFFFFFFF
 
     def _write_mem(self, addr: int, value: int) -> None:
+        if self._write_mmio(addr, value):
+            return
         self._ensure_addr(addr)
         self.memory[addr] = value & 0xFFFFFFFF
 
