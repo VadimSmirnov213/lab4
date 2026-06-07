@@ -1,0 +1,6 @@
+ADDI	0
+ST	1
+ADDI	2
+ST	3
+ADDI	4
+ST	5

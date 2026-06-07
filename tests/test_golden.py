@@ -78,3 +78,24 @@ def test_golden_hello_user_name_irq(tmp_path: Path) -> None:
     )
     expected_trace_lines = (case_dir / "expected_trace_lines.txt").read_text(encoding="utf-8").splitlines()
     assert actual_lines == expected_trace_lines
+
+
+def test_golden_sort(tmp_path: Path) -> None:
+    case_dir = Path("golden/sort")
+    _, actual_lines = _run_case(case_dir, tmp_path)
+    expected_trace_lines = (case_dir / "expected_trace_lines.txt").read_text(encoding="utf-8").splitlines()
+    assert actual_lines == expected_trace_lines
+
+
+def test_golden_double_precision(tmp_path: Path) -> None:
+    case_dir = Path("golden/double_precision")
+    _, actual_lines = _run_case(case_dir, tmp_path)
+    expected_trace_lines = (case_dir / "expected_trace_lines.txt").read_text(encoding="utf-8").splitlines()
+    assert actual_lines == expected_trace_lines
+
+
+def test_golden_prob1(tmp_path: Path) -> None:
+    case_dir = Path("golden/prob1")
+    _, actual_lines = _run_case(case_dir, tmp_path)
+    expected_trace_lines = (case_dir / "expected_trace_lines.txt").read_text(encoding="utf-8").splitlines()
+    assert actual_lines == expected_trace_lines
