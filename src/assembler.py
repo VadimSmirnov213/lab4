@@ -192,6 +192,17 @@ def _to_instruction(
             imm=0,
         )
 
+    if op == "ADDI":
+        if len(args) != 3:
+            raise ValueError("ADDI expects 2 registers and immediate/label")
+        return Instruction(
+            opcode=Opcode.ADDI,
+            rd=_parse_reg(args[0]),
+            rs1=_parse_reg(args[1]),
+            rs2=0,
+            imm=_resolve_value(args[2], labels=labels, constants=constants),
+        )
+
     if op in {"LD", "ST"}:
         if len(args) != 2:
             raise ValueError(f"{op} expects 2 register arguments")

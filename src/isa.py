@@ -20,6 +20,7 @@ class Opcode(IntEnum):
     JMP = 0x06
     TRAP = 0x07
     IRET = 0x08
+    ADDI = 0x09
 
 
 @dataclass(frozen=True)

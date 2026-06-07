@@ -185,6 +185,8 @@ class CPU:
             self.regs[instr.rd] = (self.regs[instr.rs1] + self.regs[instr.rs2]) & 0xFFFFFFFF
         elif instr.opcode == Opcode.SUB:
             self.regs[instr.rd] = (self.regs[instr.rs1] - self.regs[instr.rs2]) & 0xFFFFFFFF
+        elif instr.opcode == Opcode.ADDI:
+            self.regs[instr.rd] = (self.regs[instr.rs1] + instr.imm) & 0xFFFFFFFF
         elif instr.opcode == Opcode.LD:
             addr = self.regs[instr.rs1]
             self.regs[instr.rd] = self._read_mem(addr)
