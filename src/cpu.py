@@ -22,6 +22,24 @@ class TickLog:
     in_interrupt: bool
 
 
+class SimpleCache:
+    def __init__(self, lines_count: int = 16) -> None:
+        if lines_count <= 0:
+            raise ValueError("lines_count must be positive")
+        self.lines_count = lines_count
+        self.valid: list[bool] = [False] * lines_count
+        self.tags: list[int] = [0] * lines_count
+
+    def access(self, addr: int) -> bool:
+        index = addr % self.lines_count
+        tag = addr // self.lines_count
+        if self.valid[index] and self.tags[index] == tag:
+            return True
+        self.valid[index] = True
+        self.tags[index] = tag
+        return False
+
+
 class CPU:
     def __init__(
         self,
@@ -29,6 +47,9 @@ class CPU:
         input_bytes: bytes | None = None,
         interrupt_schedule: list[tuple[int, int]] | None = None,
         interrupt_vector_addr: int = 0,
+        cache_lines: int = 16,
+        cache_hit_ticks: int = 1,
+        cache_miss_ticks: int = 10,
     ) -> None:
         self.memory: list[int] = list(memory or [])
         self.regs: list[int] = [0] * 8
@@ -44,6 +65,9 @@ class CPU:
         self.in_interrupt: bool = False
         self.return_ip: int | None = None
         self.pending_irq_values: list[int] = []
+        self.cache = SimpleCache(lines_count=cache_lines)
+        self.cache_hit_ticks = cache_hit_ticks
+        self.cache_miss_ticks = cache_miss_ticks
 
     def _ensure_addr(self, addr: int) -> None:
         if addr < 0:
@@ -88,18 +112,45 @@ class CPU:
             return True
         return False
 
+    def _log_event(self, opcode: str) -> None:
+        self.logs.append(
+            TickLog(
+                tick=self.tick,
+                ip=self.ip,
+                word=0,
+                opcode=opcode,
+                regs=tuple(self.regs),
+                in_interrupt=self.in_interrupt,
+            )
+        )
+
+    def _cache_penalty(self, addr: int) -> None:
+        is_hit = self.cache.access(addr)
+        if is_hit:
+            self._log_event("CACHE_HIT")
+            self.tick += self.cache_hit_ticks
+        else:
+            self._log_event("CACHE_MISS")
+            self.tick += self.cache_miss_ticks
+
     def _read_mem(self, addr: int) -> int:
         mmio_value = self._read_mmio(addr)
         if mmio_value is not None:
             return mmio_value
+        self._cache_penalty(addr)
         self._ensure_addr(addr)
         return self.memory[addr] & 0xFFFFFFFF
 
     def _write_mem(self, addr: int, value: int) -> None:
         if self._write_mmio(addr, value):
             return
+        self._cache_penalty(addr)
         self._ensure_addr(addr)
         self.memory[addr] = value & 0xFFFFFFFF
+
+    def _fetch_word(self, addr: int) -> int:
+        self._ensure_addr(addr)
+        return self.memory[addr] & 0xFFFFFFFF
 
     def step(self) -> None:
         if self.halted:
@@ -118,7 +169,7 @@ class CPU:
             )
             self.tick += 1
             return
-        word = self._read_mem(self.ip)
+        word = self._fetch_word(self.ip)
         instr = decode(word)
         next_ip = self.ip + 1
 

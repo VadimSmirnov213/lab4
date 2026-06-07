@@ -145,3 +145,39 @@ def test_cpu_interrupt_not_nested_and_delivered_later() -> None:
     cpu.step()  # IRET
     assert cpu.regs[7] == ord("A")
     assert cpu.pending_irq_values == [ord("B")]
+
+
+def test_cache_miss_then_hit_affects_ticks() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.LD, rd=1, rs1=0)),
+        encode(Instruction(opcode=Opcode.LD, rd=2, rs1=0)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[0] = 20
+    cpu.memory.extend([0] * 32)
+    cpu.memory[20] = 123
+
+    cpu.run()
+
+    # Base instructions: 3 ticks. First read miss +10, second read hit +1.
+    assert cpu.tick == 14
+    assert cpu.regs[1] == 123
+    assert cpu.regs[2] == 123
+    assert any(log.opcode == "CACHE_MISS" for log in cpu.logs)
+    assert any(log.opcode == "CACHE_HIT" for log in cpu.logs)
+
+
+def test_mmio_access_bypasses_cache() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.LD, rd=1, rs1=0)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words, input_bytes=b"X")
+    cpu.regs[0] = MMIO_IN_DATA
+
+    cpu.run()
+
+    assert cpu.regs[1] == ord("X")
+    assert cpu.tick == 2
+    assert not any(log.opcode.startswith("CACHE_") for log in cpu.logs)
