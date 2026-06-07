@@ -1,0 +1,7 @@
+ADDI	0
+ADDI	1
+LD	2
+ST	3
+BEQ	4
+JMP	5
+LD	2
