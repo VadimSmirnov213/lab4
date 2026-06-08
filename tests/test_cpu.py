@@ -140,9 +140,9 @@ def test_cpu_interrupt_not_nested_and_delivered_later() -> None:
     cpu.ip = 4
     cpu.regs[6] = MMIO_IN_DATA
 
-    cpu.step()  # IRQ_ENTER
-    cpu.step()  # LD in handler (A)
-    cpu.step()  # IRET
+    cpu.step()
+    cpu.step()
+    cpu.step()
     assert cpu.regs[7] == ord("A")
     assert cpu.pending_irq_values == [ord("B")]
 
@@ -160,7 +160,6 @@ def test_cache_miss_then_hit_affects_ticks() -> None:
 
     cpu.run()
 
-    # Base instructions: 3 ticks. First read miss +10, second read hit +1.
     assert cpu.tick == 14
     assert cpu.regs[1] == 123
     assert cpu.regs[2] == 123
@@ -181,3 +180,26 @@ def test_mmio_access_bypasses_cache() -> None:
     assert cpu.regs[1] == ord("X")
     assert cpu.tick == 2
     assert not any(log.opcode.startswith("CACHE_") for log in cpu.logs)
+
+
+def test_cpu_mul_div_bne_bgt() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.MUL, rd=3, rs1=0, rs2=1)),
+        encode(Instruction(opcode=Opcode.DIV, rd=4, rs1=3, rs2=2)),
+        encode(Instruction(opcode=Opcode.BNE, rs1=4, rs2=1, imm=5)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=7)),
+        encode(Instruction(opcode=Opcode.BGT, rs1=4, rs2=2, imm=6)),
+        encode(Instruction(opcode=Opcode.HLT)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=9)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[0] = 6
+    cpu.regs[1] = 7
+    cpu.regs[2] = 6
+
+    cpu.run()
+
+    assert cpu.regs[3] == 42
+    assert cpu.regs[4] == 7
+    assert cpu.last_trap == 9

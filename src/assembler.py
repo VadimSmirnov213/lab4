@@ -181,7 +181,7 @@ def _to_instruction(
             raise ValueError(f"{op} takes no arguments")
         return Instruction(opcode=Opcode[op])
 
-    if op in {"ADD", "SUB"}:
+    if op in {"ADD", "SUB", "MUL", "DIV"}:
         if len(args) != 3:
             raise ValueError(f"{op} expects 3 register arguments")
         return Instruction(
@@ -214,11 +214,11 @@ def _to_instruction(
             imm=0,
         )
 
-    if op == "BEQ":
+    if op in {"BEQ", "BNE", "BGT"}:
         if len(args) != 3:
-            raise ValueError("BEQ expects 2 registers and immediate/label")
+            raise ValueError(f"{op} expects 2 registers and immediate/label")
         return Instruction(
-            opcode=Opcode.BEQ,
+            opcode=Opcode[op],
             rd=0,
             rs1=_parse_reg(args[0]),
             rs2=_parse_reg(args[1]),

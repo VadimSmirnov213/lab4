@@ -21,6 +21,10 @@ class Opcode(IntEnum):
     TRAP = 0x07
     IRET = 0x08
     ADDI = 0x09
+    MUL = 0x0A
+    DIV = 0x0B
+    BNE = 0x0C
+    BGT = 0x0D
 
 
 @dataclass(frozen=True)
