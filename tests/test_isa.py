@@ -29,3 +29,10 @@ def test_encode_decode_roundtrip_mul_and_branch() -> None:
     bgt_instr = Instruction(opcode=Opcode.BGT, rd=0, rs1=5, rs2=3, imm=127)
     assert decode(encode(mul_instr)) == mul_instr
     assert decode(encode(bgt_instr)) == bgt_instr
+
+
+def test_encode_decode_roundtrip_logic_and_extra_branches() -> None:
+    xor_instr = Instruction(opcode=Opcode.XOR, rd=3, rs1=1, rs2=2, imm=0)
+    ble_instr = Instruction(opcode=Opcode.BLE, rd=0, rs1=1, rs2=2, imm=-16)
+    assert decode(encode(xor_instr)) == xor_instr
+    assert decode(encode(ble_instr)) == ble_instr

@@ -25,6 +25,15 @@ class Opcode(IntEnum):
     DIV = 0x0B
     BNE = 0x0C
     BGT = 0x0D
+    MOD = 0x0E
+    AND = 0x0F
+    OR = 0x10
+    XOR = 0x11
+    SHL = 0x12
+    SHR = 0x13
+    BLT = 0x14
+    BLE = 0x15
+    BGE = 0x16
 
 
 @dataclass(frozen=True)

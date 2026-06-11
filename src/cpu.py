@@ -192,6 +192,23 @@ class CPU:
             if divisor == 0:
                 raise RuntimeError("division by zero")
             self.regs[instr.rd] = (self.regs[instr.rs1] // divisor) & 0xFFFFFFFF
+        elif instr.opcode == Opcode.MOD:
+            divisor = self.regs[instr.rs2]
+            if divisor == 0:
+                raise RuntimeError("modulo by zero")
+            self.regs[instr.rd] = (self.regs[instr.rs1] % divisor) & 0xFFFFFFFF
+        elif instr.opcode == Opcode.AND:
+            self.regs[instr.rd] = self.regs[instr.rs1] & self.regs[instr.rs2]
+        elif instr.opcode == Opcode.OR:
+            self.regs[instr.rd] = self.regs[instr.rs1] | self.regs[instr.rs2]
+        elif instr.opcode == Opcode.XOR:
+            self.regs[instr.rd] = self.regs[instr.rs1] ^ self.regs[instr.rs2]
+        elif instr.opcode == Opcode.SHL:
+            shift = self.regs[instr.rs2] & 0x1F
+            self.regs[instr.rd] = (self.regs[instr.rs1] << shift) & 0xFFFFFFFF
+        elif instr.opcode == Opcode.SHR:
+            shift = self.regs[instr.rs2] & 0x1F
+            self.regs[instr.rd] = (self.regs[instr.rs1] >> shift) & 0xFFFFFFFF
         elif instr.opcode == Opcode.ADDI:
             self.regs[instr.rd] = (self.regs[instr.rs1] + instr.imm) & 0xFFFFFFFF
         elif instr.opcode == Opcode.LD:
@@ -208,6 +225,15 @@ class CPU:
                 next_ip = instr.imm
         elif instr.opcode == Opcode.BGT:
             if self.regs[instr.rs1] > self.regs[instr.rs2]:
+                next_ip = instr.imm
+        elif instr.opcode == Opcode.BLT:
+            if self.regs[instr.rs1] < self.regs[instr.rs2]:
+                next_ip = instr.imm
+        elif instr.opcode == Opcode.BLE:
+            if self.regs[instr.rs1] <= self.regs[instr.rs2]:
+                next_ip = instr.imm
+        elif instr.opcode == Opcode.BGE:
+            if self.regs[instr.rs1] >= self.regs[instr.rs2]:
                 next_ip = instr.imm
         elif instr.opcode == Opcode.JMP:
             next_ip = instr.imm

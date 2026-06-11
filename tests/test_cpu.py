@@ -203,3 +203,34 @@ def test_cpu_mul_div_bne_bgt() -> None:
     assert cpu.regs[3] == 42
     assert cpu.regs[4] == 7
     assert cpu.last_trap == 9
+
+
+def test_cpu_mod_logic_shift_and_extra_branches() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.MOD, rd=3, rs1=0, rs2=1)),
+        encode(Instruction(opcode=Opcode.AND, rd=4, rs1=0, rs2=2)),
+        encode(Instruction(opcode=Opcode.OR, rd=5, rs1=4, rs2=1)),
+        encode(Instruction(opcode=Opcode.XOR, rd=6, rs1=5, rs2=2)),
+        encode(Instruction(opcode=Opcode.SHL, rd=7, rs1=1, rs2=2)),
+        encode(Instruction(opcode=Opcode.SHR, rd=7, rs1=7, rs2=2)),
+        encode(Instruction(opcode=Opcode.BLT, rs1=1, rs2=0, imm=8)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=1)),
+        encode(Instruction(opcode=Opcode.BLE, rs1=1, rs2=1, imm=10)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=2)),
+        encode(Instruction(opcode=Opcode.BGE, rs1=0, rs2=1, imm=12)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=3)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[0] = 29
+    cpu.regs[1] = 6
+    cpu.regs[2] = 1
+
+    cpu.run()
+
+    assert cpu.regs[3] == 5
+    assert cpu.regs[4] == (29 & 1)
+    assert cpu.regs[5] == ((29 & 1) | 6)
+    assert cpu.regs[6] == ((((29 & 1) | 6) ^ 1) & 0xFFFFFFFF)
+    assert cpu.regs[7] == 6
+    assert cpu.last_trap is None
