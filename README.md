@@ -1,22 +1,27 @@
 # Лабораторная работа №4
 
-**Выполнил**: `<ФИО>`, `<группа>`  
-**Вариант**:
+**Студент:** Смирнов Вадим Константинович  
+**Группа:** P3219  
+**Вариант:**
 
 ```text
 asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 ```
 
+---
+
 ## Язык программирования
 
-Ассемблероподобный язык (`asm`) с поддержкой:
+Реализован ассемблероподобный язык (`asm`) с поддержкой:
 
 - меток;
 - секций `.text` и `.data`;
 - директив `.org`, `.equ`, `.word`, `.asciiz`;
+- пользовательских макроопределений (`.macro ... .endm`);
+- условной компиляции (`.if/.else/.endif`);
 - комментариев `; ...`.
 
-### Синтаксис (BNF)
+### Синтаксис (БНФ)
 
 ```bnf
 <program> ::= <line> | <line> <program>
@@ -34,11 +39,13 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 <directive-line> ::= <directive> <ws-opt> <comment-opt> <EOL>
 
 <instruction> ::= "HLT"
-                | "IRET"
-                | ("ADD" | "SUB") <ws-plus> <reg> <sep> <reg> <sep> <reg>
-                | ("LD" | "ST") <ws-plus> <reg> <sep> <reg>
-                | "BEQ" <ws-plus> <reg> <sep> <reg> <sep> <imm>
-                | ("JMP" | "TRAP") <ws-plus> <imm>
+               | "IRET"
+               | ("ADD" | "SUB" | "MUL" | "DIV" | "MOD") <ws-plus> <reg> <sep> <reg> <sep> <reg>
+               | ("AND" | "OR" | "XOR" | "SHL" | "SHR") <ws-plus> <reg> <sep> <reg> <sep> <reg>
+               | "ADDI" <ws-plus> <reg> <sep> <reg> <sep> <imm>
+               | ("LD" | "ST") <ws-plus> <reg> <sep> <reg>
+               | ("BEQ" | "BNE" | "BGT" | "BLT" | "BLE" | "BGE") <ws-plus> <reg> <sep> <reg> <sep> <imm>
+               | ("JMP" | "TRAP") <ws-plus> <imm>
 
 <directive> ::= ".text"
               | ".data"
@@ -46,6 +53,15 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
               | ".equ" <ws-plus> <ident> <sep> <imm>
               | ".word" <ws-plus> <imm>
               | ".asciiz" <ws-plus> <string>
+              | ".macro" <ws-plus> <ident> <macro-params-opt>
+              | ".endm"
+              | ".if" <ws-plus> <imm-or-const>
+              | ".else"
+              | ".endif"
+
+<macro-params-opt> ::= "" | <ws-plus> <ident> | <ws-plus> <ident> <sep> <ident-list>
+<ident-list> ::= <ident> | <ident> <sep> <ident-list>
+<imm-or-const> ::= <imm> | <ident>
 
 <reg> ::= "%" <register>
 <register> ::= "R0" | "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7"
@@ -77,8 +93,10 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 
 - Стратегия вычислений: последовательное выполнение инструкций по `IP`.
 - Область видимости меток и констант (`.equ`) — глобальная в рамках файла.
-- Типы данных: 32-битные машинные слова (беззнаковое хранение в памяти).
-- Строки: `cstr` (`.asciiz`) — по символу на машинное слово + завершающий `0`.
+- Тип данных: 32-битное машинное слово.
+- Строки: `cstr` (`.asciiz`) — по символу на слово + завершающий `0`.
+
+---
 
 ## Организация памяти
 
@@ -87,38 +105,28 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 - Машинное слово: 32 бита (4 байта).
 - Адресация: по индексу машинного слова.
 - Программа и данные размещаются транслятором в едином массиве слов с учетом `.org`.
-- Поддержан memory-mapped I/O (`mem`):
-  - `0xFF00` — `MMIO_IN_DATA`,
-  - `0xFF01` — `MMIO_IN_STATUS`,
-  - `0xFF02` — `MMIO_OUT_DATA`.
 
-Регистры процессора:
+### Memory-mapped I/O (`mem`)
+
+- `0xFF00` — `MMIO_IN_DATA`,
+- `0xFF01` — `MMIO_IN_STATUS`,
+- `0xFF02` — `MMIO_OUT_DATA`.
+
+### Регистры
 
 - `R0..R7` — регистры общего назначения;
 - `IP` — счетчик команд;
-- служебные (в модели): флаги остановки, состояние прерывания, счётчик тактов.
+- служебные поля модели: `tick`, `halted`, признак режима прерывания.
+
+---
 
 ## Система команд
 
-Архитектура: `risc` (фиксированная длина инструкции, арифметика только по регистрам).
+Архитектура: `risc` (фиксированная длина инструкции, арифметика над регистрами).
 
-### Набор инструкций
+### Кодирование (binary)
 
-| Opcode | Мнемоника | Формат | Описание |
-|---|---|---|---|
-| `0x00` | `HLT`  | `-` | Останов |
-| `0x01` | `ADD`  | `rd, rs1, rs2` | `rd = rs1 + rs2` |
-| `0x02` | `SUB`  | `rd, rs1, rs2` | `rd = rs1 - rs2` |
-| `0x03` | `LD`   | `rd, rs1` | `rd = MEM[rs1]` |
-| `0x04` | `ST`   | `rd, rs1` | `MEM[rd] = rs1` |
-| `0x05` | `BEQ`  | `rs1, rs2, imm` | переход на `imm`, если `rs1 == rs2` |
-| `0x06` | `JMP`  | `imm` | безусловный переход |
-| `0x07` | `TRAP` | `imm` | программный trap |
-| `0x08` | `IRET` | `-` | возврат из обработчика прерывания |
-
-### Кодирование инструкций (binary)
-
-Инструкция кодируется в 32 бита:
+Каждая инструкция занимает 32 бита:
 
 ```text
 [31:24] opcode
@@ -128,9 +136,39 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 [11:00] imm12 (signed)
 ```
 
+### Набор инструкций
+
+| Opcode | Мнемоника | Формат | Назначение |
+|---|---|---|---|
+| `0x00` | `HLT`  | `-` | останов модели |
+| `0x01` | `ADD`  | `rd, rs1, rs2` | сложение |
+| `0x02` | `SUB`  | `rd, rs1, rs2` | вычитание |
+| `0x03` | `LD`   | `rd, rs1` | чтение из памяти/MMIO |
+| `0x04` | `ST`   | `rd, rs1` | запись в память/MMIO |
+| `0x05` | `BEQ`  | `rs1, rs2, imm` | ветвление при равенстве |
+| `0x06` | `JMP`  | `imm` | безусловный переход |
+| `0x07` | `TRAP` | `imm` | программный trap-id |
+| `0x08` | `IRET` | `-` | возврат из ISR |
+| `0x09` | `ADDI` | `rd, rs1, imm` | сложение с immediate |
+| `0x0A` | `MUL`  | `rd, rs1, rs2` | умножение |
+| `0x0B` | `DIV`  | `rd, rs1, rs2` | деление |
+| `0x0C` | `BNE`  | `rs1, rs2, imm` | ветвление при неравенстве |
+| `0x0D` | `BGT`  | `rs1, rs2, imm` | ветвление `>` |
+| `0x0E` | `MOD`  | `rd, rs1, rs2` | остаток от деления |
+| `0x0F` | `AND`  | `rd, rs1, rs2` | побитовое И |
+| `0x10` | `OR`   | `rd, rs1, rs2` | побитовое ИЛИ |
+| `0x11` | `XOR`  | `rd, rs1, rs2` | побитовое XOR |
+| `0x12` | `SHL`  | `rd, rs1, rs2` | логический сдвиг влево |
+| `0x13` | `SHR`  | `rd, rs1, rs2` | логический сдвиг вправо |
+| `0x14` | `BLT`  | `rs1, rs2, imm` | ветвление `<` |
+| `0x15` | `BLE`  | `rs1, rs2, imm` | ветвление `<=` |
+| `0x16` | `BGE`  | `rs1, rs2, imm` | ветвление `>=` |
+
+---
+
 ## Транслятор
 
-Реализован в `src/assembler.py`.
+Реализация: `src/assembler.py`.
 
 ### CLI
 
@@ -141,68 +179,118 @@ python -m src.assembler <input.asm> <output.bin> --listing <output.lst>
 ### Этапы трансляции
 
 1. Очистка комментариев и разбор строк.
-2. Первый проход: сбор меток, учет `.org`, `.equ`.
-3. Второй проход: кодирование инструкций и директив в машинные слова.
-4. Формирование:
+2. Препроцессинг: раскрытие `.macro`, обработка `.if/.else/.endif`.
+3. Первый проход: сбор меток, учет `.org`, `.equ`.
+4. Второй проход: кодирование инструкций и директив в машинные слова.
+5. Формирование:
    - бинарного файла (`.bin`);
-   - текстового листинга (`.lst`) формата:
-     `<addr> - <HEXCODE> - <mnemonic>`.
+   - листинга (`.lst`) формата `<addr> - <HEXCODE> - <mnemonic>`.
+
+---
 
 ## Модель процессора
 
-Реализована в `src/cpu.py`.
+Реализация: `src/cpu.py`.
 
 ### Общая логика
 
-- `hw` control unit (hardwired логика в коде исполнения инструкций).
-- Моделирование `tick`: шаг `step()` изменяет состояние процессора и увеличивает `tick`.
-- Основной цикл: `fetch -> decode -> execute`.
+- `hw` control unit (hardwired в коде исполнения инструкций);
+- цикл `fetch -> decode -> execute`;
+- режим `tick`: счётчик тактов инкрементируется на каждом шаге модели;
+- журнал исполнения хранится в `TickLog`.
 
 ### Прерывания (`trap`)
 
-- Поддержано расписание прерываний: список `(tick, byte)`.
-- При наступлении события и если процессор не в ISR:
-  - вход в обработчик по `interrupt_vector_addr`,
-  - сохраняется `return_ip`,
-  - фиксируется событие `IRQ_ENTER` в логе.
-- Возврат из ISR — инструкция `IRET`.
+Поддержан входной график прерываний: список `(tick, byte)`.
 
-### Ввод-вывод (`mem`)
+При наступлении события:
 
-- Ввод/вывод реализован через MMIO-адреса (`LD/ST` к специальным адресам).
-- Выход накапливается в `output_buffer`.
+1. если процессор не в ISR — выполняется вход в обработчик;
+2. сохраняется адрес возврата `return_ip`;
+3. `IP` переключается на `interrupt_vector_addr`;
+4. в журнал пишется `IRQ_ENTER`.
 
-### Журнал работы
+Возврат из ISR выполняется инструкцией `IRET`.
 
-Лог хранит:
+### Кеш (`cache`)
 
-- номер такта;
-- `IP`;
-- исполняемую инструкцию;
-- состояние регистров;
-- признак нахождения в прерывании.
+Реализован простой direct-mapped кеш (`SimpleCache`):
+
+- hit: +1 такт;
+- miss: +10 тактов;
+- для наблюдения в лог пишутся события `CACHE_HIT` и `CACHE_MISS`.
+
+MMIO-доступы кеш не используют.
+
+### Тактовая модель инструкций
+
+В текущей реализации `tick` считается на уровне шага `CPU.step()`:
+
+- базово любая инструкция добавляет `+1` такт;
+- для `LD`/`ST` в обычную память добавляется штраф доступа через кеш:
+  - `CACHE_HIT`: дополнительно `+1` такт;
+  - `CACHE_MISS`: дополнительно `+10` тактов;
+- для `LD`/`ST` в MMIO (`0xFF00..0xFF02`) кеш не используется, остается базовый `+1` такт;
+- событие входа в прерывание (`IRQ_ENTER`) занимает отдельный шаг и тоже добавляет `+1` такт.
+
+Итого:
+
+- большинство инструкций (`ADD`, `SUB`, `ADDI`, `JMP`, `BEQ`, `TRAP`, `IRET`, и т.д.) — `1` такт;
+- `LD`/`ST` (обычная память): `2` такта при hit и `11` тактов при miss;
+- `LD`/`ST` (MMIO): `1` такт.
+
+### Схемы DataPath и ControlUnit
+
+
 
 ## Тестирование
 
-Тесты реализованы на `pytest`:
+Тесты реализованы на `pytest`.
 
-- `tests/test_isa.py` — кодирование/декодирование ISA;
-- `tests/test_assembler.py` — транслятор, директивы, листинг;
-- `tests/test_cpu.py` — исполнение инструкций, MMIO, прерывания.
+### Unit / integration
 
-Текущее состояние: `15 passed`.
+- `tests/test_isa.py` — кодирование/декодирование ISA.
+- `tests/test_assembler.py` — трансляция, директивы, листинг.
+- `tests/test_cpu.py` — исполнение инструкций, MMIO, прерывания, кеш.
 
-Запуск:
+### Golden (end-to-end)
+
+`tests/test_golden.py` прогоняет цепочку:
+
+```text
+source.asm -> assembler -> binary/listing -> CPU run -> сравнение с expected
+```
+
+Используются кейсы:
+
+- `golden/hello`
+- `golden/cat`
+- `golden/hello_user_name`
+- `golden/sort`
+- `golden/double_precision`
+- `golden/prob1`
+
+Для каждого кейса сравниваются:
+
+- итоговый вывод (`expected_output.txt`);
+- репрезентативные строки трейса (`expected_trace_lines.txt`).
+
+### Запуск
 
 ```bash
 .venv/bin/python -m pytest -q
 ```
 
+Текущее локальное состояние: `29 passed`.
+
+---
+
 ## Алгоритм по варианту
 
-`prob1` соответствует задаче Project Euler #4 (Largest Palindrome Product).
-
+`prob1` — Project Euler #4 (Largest Palindrome Product).  
 Ссылка: [https://projecteuler.net/problem=4](https://projecteuler.net/problem=4)
+
+---
 
 ## Статус реализации варианта
 
@@ -210,11 +298,23 @@ python -m src.assembler <input.asm> <output.bin> --listing <output.lst>
 - [x] `risc`
 - [x] `neum`
 - [x] `hw`
-- [x] `tick` (базовый потактовый лог)
+- [x] `tick` (пошаговое моделирование с подсчётом тактов)
 - [x] `binary`
-- [x] `trap` (базовый механизм ISR/IRET)
+- [x] `trap`
 - [x] `mem` (MMIO)
 - [x] `cstr`
-- [ ] `cache` (в работе)
-- [ ] Полный набор golden-тестов обязательных алгоритмов
+- [x] `prob1`
+- [x] `cache` (базовая модель кеша в CPU)
+
+---
+
+## Пример использования
+
+```bash
+# 1) Трансляция
+python -m src.assembler golden/hello/source.asm hello.bin --listing hello.lst
+
+# 2) Прогон тестов
+.venv/bin/python -m pytest -q
+```
 

@@ -93,3 +93,39 @@ def test_assemble_iret_instruction() -> None:
         """
     )
     assert words == [encode(Instruction(opcode=Opcode.IRET))]
+
+
+def test_assemble_with_user_macro() -> None:
+    source = """
+    .macro INC reg, one
+        ADD reg, reg, one
+    .endm
+
+    _start:
+        INC %R1, %R2
+        HLT
+    """
+    words = assemble_to_words(source)
+    assert words == [
+        encode(Instruction(opcode=Opcode.ADD, rd=1, rs1=1, rs2=2)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+
+
+def test_assemble_with_conditional_compilation() -> None:
+    source = """
+    .equ ENABLE_FAST, 1
+
+    _start:
+    .if ENABLE_FAST
+        TRAP 1
+    .else
+        TRAP 2
+    .endif
+        HLT
+    """
+    words = assemble_to_words(source)
+    assert words == [
+        encode(Instruction(opcode=Opcode.TRAP, imm=1)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
