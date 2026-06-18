@@ -355,22 +355,6 @@ source.asm -> assembler -> binary/listing -> CPU run -> сравнение с ex
 
 ---
 
-## Статус реализации варианта
-
-- [x] `asm`
-- [x] `risc`
-- [x] `neum`
-- [x] `hw`
-- [x] `tick` (пошаговое моделирование с подсчётом тактов)
-- [x] `binary`
-- [x] `trap`
-- [x] `mem` (MMIO)
-- [x] `cstr`
-- [x] `prob1`
-- [x] `cache` (базовая модель кеша в CPU)
-
----
-
 ## Пример использования
 
 ```bash
