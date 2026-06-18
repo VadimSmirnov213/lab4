@@ -10,6 +10,58 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 
 ---
 
+## Структура проекта
+
+```text
+src/
+  ak_lab4/
+    __init__.py
+    isa/
+      __init__.py
+      model.py
+    translator/
+      __init__.py
+      types.py
+      parser.py
+      preprocess.py
+      encoding.py
+      assembler.py
+      pipeline.py      # compat wrapper
+      cli.py
+    simulator/
+      __init__.py
+      core.py
+      cache.py
+      io.py
+      loader.py
+      cli.py
+      __main__.py
+    isa_core.py          # compat wrapper
+    translator_core.py   # compat wrapper
+    machine_core.py      # compat wrapper
+    machine.py           # public API wrapper
+
+tests/
+golden/
+```
+
+Основная логика расположена в пакете `src/ak_lab4`.
+
+### Ответственность модулей
+
+- `isa/model.py` — формат инструкций и encode/decode.
+- `translator/preprocess.py` — макросы и условная компиляция.
+- `translator/parser.py` — лексико-синтаксический разбор строк ASM.
+- `translator/encoding.py` — валидация, pass1 и отображение в `Instruction`.
+- `translator/assembler.py` — сборочный pipeline + CLI.
+- `simulator/core.py` — цикл исполнения CPU.
+- `simulator/cache.py` — direct-mapped cache (write-through).
+- `simulator/io.py` — MMIO-карта.
+- `simulator/loader.py` — загрузка бинарного кода.
+- `simulator/cli.py` — запуск модели процессора из CLI.
+
+---
+
 ## Язык программирования
 
 Реализован ассемблероподобный язык (`asm`) с поддержкой:
@@ -95,6 +147,7 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 - Область видимости меток и констант (`.equ`) — глобальная в рамках файла.
 - Тип данных: 32-битное машинное слово.
 - Строки: `cstr` (`.asciiz`) — по символу на слово + завершающий `0`.
+- Для условных ветвлений `BGT/BLT/BLE/BGE` сравнение выполняется в signed32-семантике.
 
 ---
 
@@ -168,12 +221,12 @@ asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 
 ## Транслятор
 
-Реализация: `src/assembler.py`.
+Реализация: `src/ak_lab4/translator/assembler.py`.
 
 ### CLI
 
 ```bash
-python -m src.assembler <input.asm> <output.bin> --listing <output.lst>
+python -m src.ak_lab4.translator <input.asm> <output.bin> --listing <output.lst>
 ```
 
 ### Этапы трансляции
@@ -186,17 +239,23 @@ python -m src.assembler <input.asm> <output.bin> --listing <output.lst>
    - бинарного файла (`.bin`);
    - листинга (`.lst`) формата `<addr> - <HEXCODE> - <mnemonic>`.
 
+Валидация транслятора:
+
+- `.org` допускает только неотрицательные адреса;
+- проверяются конфликты имён меток и констант;
+- для препроцессора проверяются ошибки структуры (`.else/.endif` без `.if`, незакрытые блоки).
+
 ---
 
 ## Модель процессора
 
-Реализация: `src/cpu.py`.
+Реализация: `src/ak_lab4/simulator/core.py`.
 
 ### Общая логика
 
 - `hw` control unit (hardwired в коде исполнения инструкций);
-- цикл `fetch -> decode -> execute`;
-- режим `tick`: счётчик тактов инкрементируется на каждом шаге модели;
+- цикл разбит на фазы `FETCH -> DECODE -> EXEC` (+ `MEM` для `LD/ST`);
+- режим `tick`: один вызов `CPU.step()` соответствует ровно одному такту/фазе;
 - журнал исполнения хранится в `TickLog`.
 
 ### Прерывания (`trap`)
@@ -214,7 +273,7 @@ python -m src.assembler <input.asm> <output.bin> --listing <output.lst>
 
 ### Кеш (`cache`)
 
-Реализован простой direct-mapped кеш (`SimpleCache`):
+Реализован простой direct-mapped кеш (`SimpleCache`) с write-through:
 
 - hit: +1 такт;
 - miss: +10 тактов;
@@ -224,20 +283,24 @@ MMIO-доступы кеш не используют.
 
 ### Тактовая модель инструкций
 
-В текущей реализации `tick` считается на уровне шага `CPU.step()`:
+В текущей реализации `tick` считается на фазах, а не на «инструкции целиком»:
 
-- базово любая инструкция добавляет `+1` такт;
-- для `LD`/`ST` в обычную память добавляется штраф доступа через кеш:
-  - `CACHE_HIT`: дополнительно `+1` такт;
-  - `CACHE_MISS`: дополнительно `+10` тактов;
-- для `LD`/`ST` в MMIO (`0xFF00..0xFF02`) кеш не используется, остается базовый `+1` такт;
-- событие входа в прерывание (`IRQ_ENTER`) занимает отдельный шаг и тоже добавляет `+1` такт.
+- каждый тик начинается с проверки IRQ (`PHASE_IRQ_CHECK`);
+- немемориальные инструкции проходят `FETCH + DECODE + EXEC` (3 такта);
+- `LD`/`ST` дополнительно переходят в `MEM`-фазу с ожиданием памяти;
+- для обычной памяти в `MEM` применяется латентность кеша:
+  - `CACHE_HIT`: `1` такт ожидания;
+  - `CACHE_MISS`: `10` тактов ожидания;
+- MMIO (`0xFF00..0xFF02`) кеш обходят, но сохраняют фазу `MEM` (1 такт);
+- вход в прерывание (`IRQ_ENTER`) — отдельный такт с очисткой текущего pipeline-состояния и прыжком в вектор.
+
+Опционально поддержан подробный режим тактирования (`detailed_tick`): в журнал добавляются микрофазы `PHASE_IRQ_CHECK`, `PHASE_FETCH`, `PHASE_DECODE`, `PHASE_EXEC`, `PHASE_MEM`.
 
 Итого:
 
-- большинство инструкций (`ADD`, `SUB`, `ADDI`, `JMP`, `BEQ`, `TRAP`, `IRET`, и т.д.) — `1` такт;
-- `LD`/`ST` (обычная память): `2` такта при hit и `11` тактов при miss;
-- `LD`/`ST` (MMIO): `1` такт.
+- большинство инструкций (`ADD`, `SUB`, `ADDI`, `JMP`, `BEQ`, `TRAP`, `IRET`, и т.д.) — `3` такта;
+- `LD`/`ST` (обычная память): `4` такта при hit и `13` тактов при miss;
+- `LD`/`ST` (MMIO): `4` такта.
 
 ### Схемы DataPath и ControlUnit
 
@@ -312,9 +375,12 @@ source.asm -> assembler -> binary/listing -> CPU run -> сравнение с ex
 
 ```bash
 # 1) Трансляция
-python -m src.assembler golden/hello/source.asm hello.bin --listing hello.lst
+python -m src.ak_lab4.translator golden/hello/source.asm hello.bin --listing hello.lst
 
-# 2) Прогон тестов
+# 2) Запуск симулятора
+python -m src.ak_lab4.simulator hello.bin
+
+# 3) Прогон тестов
 .venv/bin/python -m pytest -q
 ```
 

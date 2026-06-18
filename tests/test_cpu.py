@@ -1,6 +1,8 @@
-from src.assembler import assemble_to_words
-from src.cpu import CPU, MMIO_IN_DATA, MMIO_IN_STATUS, MMIO_OUT_DATA
-from src.isa import Instruction, Opcode, encode
+import pytest
+
+from src.ak_lab4.isa import Instruction, Opcode, encode
+from src.ak_lab4.machine import CPU, MMIO_IN_DATA, MMIO_IN_STATUS, MMIO_OUT_DATA
+from src.ak_lab4.translator import assemble_to_words
 
 
 def test_cpu_executes_arithmetic_and_halt() -> None:
@@ -18,7 +20,7 @@ def test_cpu_executes_arithmetic_and_halt() -> None:
     assert cpu.regs[2] == 12
     assert cpu.regs[3] == 7
     assert cpu.halted
-    assert cpu.tick == 3
+    assert cpu.tick == 9
 
 
 def test_cpu_branch_and_jump() -> None:
@@ -57,7 +59,7 @@ def test_cpu_with_assembler_integration() -> None:
 
     assert cpu.regs[2] == 42
     assert cpu.halted
-    assert cpu.tick == 3
+    assert cpu.tick == 9
 
 
 def test_cpu_mmio_input_status_and_data() -> None:
@@ -143,6 +145,8 @@ def test_cpu_interrupt_not_nested_and_delivered_later() -> None:
     cpu.step()
     cpu.step()
     cpu.step()
+    cpu.step()
+    cpu.step()
     assert cpu.regs[7] == ord("A")
     assert cpu.pending_irq_values == [ord("B")]
 
@@ -160,7 +164,7 @@ def test_cache_miss_then_hit_affects_ticks() -> None:
 
     cpu.run()
 
-    assert cpu.tick == 14
+    assert cpu.tick == 20
     assert cpu.regs[1] == 123
     assert cpu.regs[2] == 123
     assert any(log.opcode == "CACHE_MISS" for log in cpu.logs)
@@ -178,7 +182,7 @@ def test_mmio_access_bypasses_cache() -> None:
     cpu.run()
 
     assert cpu.regs[1] == ord("X")
-    assert cpu.tick == 2
+    assert cpu.tick == 7
     assert not any(log.opcode.startswith("CACHE_") for log in cpu.logs)
 
 
@@ -234,3 +238,66 @@ def test_cpu_mod_logic_shift_and_extra_branches() -> None:
     assert cpu.regs[6] == ((((29 & 1) | 6) ^ 1) & 0xFFFFFFFF)
     assert cpu.regs[7] == 6
     assert cpu.last_trap is None
+
+
+def test_cpu_signed_branches_use_signed32_semantics() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.BLT, rs1=0, rs2=1, imm=3)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=1)),
+        encode(Instruction(opcode=Opcode.HLT)),
+        encode(Instruction(opcode=Opcode.TRAP, imm=2)),
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[0] = 0xFFFFFFFF
+    cpu.regs[1] = 1
+
+    cpu.run()
+
+    assert cpu.last_trap == 2
+
+
+def test_cpu_division_by_zero_raises() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.DIV, rd=0, rs1=1, rs2=2)),
+    ]
+    cpu = CPU(memory=words)
+    cpu.regs[1] = 10
+    cpu.regs[2] = 0
+
+    with pytest.raises(RuntimeError, match="division by zero"):
+        cpu.run(max_ticks=10)
+
+
+def test_cpu_irq_data_latch_ack_on_mmio_read() -> None:
+    source = """
+    .org 0
+    irq_handler:
+        LD %R7, %R6
+        IRET
+    .org 4
+    _start:
+        HLT
+    """
+    words = assemble_to_words(source)
+    cpu = CPU(memory=words, interrupt_schedule=[(0, ord("K"))], interrupt_vector_addr=0)
+    cpu.ip = 4
+    cpu.regs[6] = MMIO_IN_DATA
+
+    cpu.step()
+    assert cpu.irq_data_latch == ord("K")
+    cpu.step()
+    cpu.step()
+    cpu.step()
+    cpu.step()
+    assert cpu.irq_data_latch is None
+
+
+def test_cpu_detailed_tick_emits_phase_logs() -> None:
+    words = [
+        encode(Instruction(opcode=Opcode.HLT)),
+    ]
+    cpu = CPU(memory=words, detailed_tick=True)
+    cpu.run()
+    phase_ops = [log.opcode for log in cpu.logs if log.opcode.startswith("PHASE_")]
+    assert {"PHASE_IRQ_CHECK", "PHASE_FETCH", "PHASE_DECODE", "PHASE_EXEC"}.issubset(set(phase_ops))

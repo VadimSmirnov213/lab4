@@ -1,4 +1,4 @@
-from src.isa import Instruction, Opcode, decode, encode, word_from_bytes, word_to_bytes
+from src.ak_lab4.isa import Instruction, Opcode, decode, encode, word_from_bytes, word_to_bytes
 
 
 def test_encode_decode_roundtrip_add() -> None:

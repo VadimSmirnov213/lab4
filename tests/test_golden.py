@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from src.assembler import assemble, write_binary, write_listing
-from src.cpu import CPU, MMIO_OUT_DATA
+from src.ak_lab4.machine import CPU, MMIO_OUT_DATA
+from src.ak_lab4.translator import assemble, write_binary, write_listing
 
 
 def _run_case(
@@ -23,6 +23,10 @@ def _run_case(
     out_lst = tmp_path / f"{case_dir.name}.lst"
     write_binary(result.words, str(out_bin))
     write_listing(result.listing_entries, str(out_lst))
+    assert out_bin.exists() and out_bin.stat().st_size == len(result.words) * 4
+    lst_lines = out_lst.read_text(encoding="utf-8").splitlines()
+    assert lst_lines, f"listing is empty for {case_dir.name}"
+    assert len(lst_lines) == len(result.listing_entries)
 
     cpu = CPU(
         memory=result.words,
@@ -62,11 +66,11 @@ def test_golden_cat(tmp_path: Path) -> None:
 def test_golden_hello_user_name_irq(tmp_path: Path) -> None:
     case_dir = Path("golden/hello_user_name")
     schedule = [
-        (12, ord("A")),
-        (15, ord("l")),
-        (18, ord("i")),
-        (21, ord("c")),
-        (24, ord("e")),
+        (28, ord("A")),
+        (31, ord("l")),
+        (34, ord("i")),
+        (37, ord("c")),
+        (40, ord("e")),
     ]
     _, actual_lines = _run_case(
         case_dir,

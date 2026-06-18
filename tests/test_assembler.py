@@ -1,7 +1,9 @@
 from pathlib import Path
 
-from src.assembler import assemble, assemble_file, assemble_to_words
-from src.isa import Instruction, Opcode, encode
+import pytest
+
+from src.ak_lab4.isa import Instruction, Opcode, encode
+from src.ak_lab4.translator import assemble, assemble_file, assemble_to_words
 
 
 def test_assemble_basic_program_with_label() -> None:
@@ -129,3 +131,62 @@ def test_assemble_with_conditional_compilation() -> None:
         encode(Instruction(opcode=Opcode.TRAP, imm=1)),
         encode(Instruction(opcode=Opcode.HLT)),
     ]
+
+
+def test_assemble_rejects_negative_org() -> None:
+    with pytest.raises(ValueError, match=r"\.org must be non-negative"):
+        assemble_to_words(
+            """
+            .org -1
+            _start:
+                HLT
+            """
+        )
+
+
+def test_preprocess_rejects_unmatched_else() -> None:
+    with pytest.raises(ValueError, match=r"\.else without matching \.if"):
+        assemble_to_words(
+            """
+            _start:
+            .else
+                HLT
+            """
+        )
+
+
+def test_preprocess_rejects_unmatched_endif() -> None:
+    with pytest.raises(ValueError, match=r"\.endif without matching \.if"):
+        assemble_to_words(
+            """
+            _start:
+            .endif
+                HLT
+            """
+        )
+
+
+def test_preprocess_rejects_unterminated_macro() -> None:
+    with pytest.raises(ValueError, match=r"unterminated macro definition"):
+        assemble_to_words(
+            """
+            .macro INC reg
+                ADD reg, reg, %R0
+            _start:
+                HLT
+            """
+        )
+
+
+def test_preprocess_rejects_macro_arity_mismatch() -> None:
+    with pytest.raises(ValueError, match=r"expects 2 args, got 1"):
+        assemble_to_words(
+            """
+            .macro MOV dst, src
+                ADD dst, src, %R0
+            .endm
+            _start:
+                MOV %R1
+                HLT
+            """
+        )
