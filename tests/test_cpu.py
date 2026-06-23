@@ -20,7 +20,7 @@ def test_cpu_executes_arithmetic_and_halt() -> None:
     assert cpu.regs[2] == 12
     assert cpu.regs[3] == 7
     assert cpu.halted
-    assert cpu.tick == 9
+    assert cpu.tick == 6
 
 
 def test_cpu_branch_and_jump() -> None:
@@ -59,7 +59,7 @@ def test_cpu_with_assembler_integration() -> None:
 
     assert cpu.regs[2] == 42
     assert cpu.halted
-    assert cpu.tick == 9
+    assert cpu.tick == 6
 
 
 def test_cpu_mmio_input_status_and_data() -> None:
@@ -145,8 +145,6 @@ def test_cpu_interrupt_not_nested_and_delivered_later() -> None:
     cpu.step()
     cpu.step()
     cpu.step()
-    cpu.step()
-    cpu.step()
     assert cpu.regs[7] == ord("A")
     assert cpu.pending_irq_values == [ord("B")]
 
@@ -164,7 +162,7 @@ def test_cache_miss_then_hit_affects_ticks() -> None:
 
     cpu.run()
 
-    assert cpu.tick == 20
+    assert cpu.tick == 17
     assert cpu.regs[1] == 123
     assert cpu.regs[2] == 123
     assert any(log.opcode == "CACHE_MISS" for log in cpu.logs)
@@ -182,7 +180,7 @@ def test_mmio_access_bypasses_cache() -> None:
     cpu.run()
 
     assert cpu.regs[1] == ord("X")
-    assert cpu.tick == 7
+    assert cpu.tick == 4
     assert not any(log.opcode.startswith("CACHE_") for log in cpu.logs)
 
 
@@ -286,8 +284,6 @@ def test_cpu_irq_data_latch_ack_on_mmio_read() -> None:
 
     cpu.step()
     assert cpu.irq_data_latch == ord("K")
-    cpu.step()
-    cpu.step()
     cpu.step()
     cpu.step()
     assert cpu.irq_data_latch is None

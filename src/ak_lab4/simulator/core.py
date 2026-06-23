@@ -213,13 +213,6 @@ class CPU:
             self._tick_phase("FETCH")
             self.current_instr_ip = self.ip
             self.current_word = self._fetch_word(self.ip)
-            self.phase = "DECODE"
-            self.tick += 1
-            return
-
-        if self.phase == "DECODE":
-            if self.current_word is None:
-                raise RuntimeError("decode phase without fetched word")
             self._tick_phase("DECODE")
             self.current_instr = decode(self.current_word)
             self.next_ip = self.current_instr_ip + 1
@@ -285,17 +278,25 @@ class CPU:
                 self.regs[instr.rd] = (self.regs[instr.rs1] + instr.imm) & 0xFFFFFFFF
                 self._complete_instruction()
             elif instr.opcode == Opcode.LD:
-                self.mem_kind = "LD"
                 self.mem_addr = self.regs[instr.rs1]
-                self.mem_rd = instr.rd
-                self.mem_initialized = False
-                self.phase = "MEM"
+                mmio_value = self._read_mmio(self.mem_addr)
+                if mmio_value is not None:
+                    self.regs[instr.rd] = mmio_value & 0xFFFFFFFF
+                    self._complete_instruction()
+                else:
+                    self.mem_kind = "LD"
+                    self.mem_rd = instr.rd
+                    self.mem_initialized = False
+                    self.phase = "MEM"
             elif instr.opcode == Opcode.ST:
-                self.mem_kind = "ST"
                 self.mem_addr = self.regs[instr.rd]
                 self.mem_value = self.regs[instr.rs1]
-                self.mem_initialized = False
-                self.phase = "MEM"
+                if self._write_mmio(self.mem_addr, self.mem_value):
+                    self._complete_instruction()
+                else:
+                    self.mem_kind = "ST"
+                    self.mem_initialized = False
+                    self.phase = "MEM"
             elif instr.opcode == Opcode.BEQ:
                 if self.regs[instr.rs1] == self.regs[instr.rs2]:
                     self.next_ip = instr.imm
@@ -338,20 +339,12 @@ class CPU:
                 raise RuntimeError("MEM phase without memory operation")
 
             if not self.mem_initialized:
-                mmio_value = self._read_mmio(self.mem_addr)
                 if self.mem_kind == "LD":
-                    if mmio_value is not None:
-                        self.mem_value_latch = mmio_value
-                        self.mem_wait_remaining = 1
-                    else:
-                        self.mem_value_latch, is_hit = self.cache.read(self.mem_addr, self._backing_read)
-                        self._log_cache_and_add_penalty(is_hit)
+                    self.mem_value_latch, is_hit = self.cache.read(self.mem_addr, self._backing_read)
+                    self._log_cache_and_add_penalty(is_hit)
                 else:
-                    if self._write_mmio(self.mem_addr, self.mem_value):
-                        self.mem_wait_remaining = 1
-                    else:
-                        is_hit = self.cache.write(self.mem_addr, self.mem_value, self._backing_write)
-                        self._log_cache_and_add_penalty(is_hit)
+                    is_hit = self.cache.write(self.mem_addr, self.mem_value, self._backing_write)
+                    self._log_cache_and_add_penalty(is_hit)
                 self.mem_initialized = True
 
             self.mem_wait_remaining -= 1

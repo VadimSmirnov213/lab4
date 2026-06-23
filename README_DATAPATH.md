@@ -7,7 +7,7 @@
 
 ```mermaid
 flowchart LR
-    CU["Control Unit (FSM)\nphase: IRQ_CHECK/FETCH/DECODE/EXEC/MEM\nfields: next_ip, mem_kind, mem_wait_remaining,\nmem_initialized, in_interrupt, return_ip,\nirq_data_latch"]
+    CU["Control Unit (FSM)\nphase: IRQ_CHECK/FETCH(+DECODE)/EXEC/MEM\nfields: next_ip, mem_kind, mem_wait_remaining,\nmem_initialized, in_interrupt, return_ip,\nirq_data_latch"]
 
     PC["IP (Program Counter)"]
     IMEM["Unified Memory (instruction path)\n_fetch_word(addr)"]
@@ -73,15 +73,14 @@ flowchart LR
 | Фаза | Что делает CU | Активные сигналы (логически) | Переход |
 |---|---|---|---|
 | `IRQ_CHECK` | Проверяет расписание IRQ и вход в обработчик | `irq_poll`, `irq_enter`, `pipeline_flush` | `FETCH` или `IRQ_ENTER` |
-| `FETCH` | Читает слово инструкции по `IP` | `pc_to_mem_addr`, `mem_instr_read`, `ir_latch` | `DECODE` |
-| `DECODE` | Декодирует `current_word` в `current_instr` | `decode_enable`, `next_ip_default = ip + 1` | `EXEC` |
+| `FETCH` | Читает слово инструкции по `IP` и сразу декодирует | `pc_to_mem_addr`, `mem_instr_read`, `ir_latch`, `decode_enable` | `EXEC` |
 | `EXEC` | Выполняет ALU/branch/jump/trap/iret | `reg_read`, `alu_op`, `branch_cmp`, `pc_src`, `reg_write` | `FETCH` или `MEM` |
-| `MEM` | Выполняет `LD/ST` через MMIO или cache+memory | `mem_read`/`mem_write`, `mmio_select`, `cache_select`, `wait_control`, `wb_select` | `MEM` (ожидание) или `FETCH` |
+| `MEM` | Выполняет `LD/ST` через cache+memory (не-MMIO) | `mem_read`/`mem_write`, `cache_select`, `wait_control`, `wb_select` | `MEM` (ожидание) или `FETCH` |
 
 ## Стрелки и источники данных (что куда идет)
 
 - `IP -> Memory -> current_word`: выборка инструкции в `FETCH`.
-- `current_word -> decode -> current_instr`: декодирование в `DECODE`.
+- `current_word -> decode -> current_instr`: декодирование в конце `FETCH`.
 - `regs + current_instr -> ALU`: вычисление результата/условия перехода в `EXEC`.
 - `ALU/branch -> next_ip -> IP`: обновление счетчика команд.
 - `regs + current_instr -> mem_addr/mem_value`: подготовка доступа памяти в `LD/ST`.
@@ -113,12 +112,11 @@ stateDiagram-v2
 
     IRQ_ENTER --> FETCH: tick + ip=interrupt_vector_addr\nreturn_ip=old_ip\nflush current_word/current_instr/mem_state
 
-    FETCH --> DECODE: current_word = memory[ip]
-    DECODE --> EXEC: current_instr = decode(current_word)\nnext_ip = ip + 1
+    FETCH --> EXEC: current_word = memory[ip]\ncurrent_instr = decode(current_word)\nnext_ip = ip + 1
 
     EXEC --> HALT: opcode == HLT
     EXEC --> FETCH: ALU/branch/jmp/trap/iret complete
-    EXEC --> MEM: opcode in {LD, ST}
+    EXEC --> MEM: opcode in {LD, ST} && !MMIO
 
     MEM --> MEM: mem_wait_remaining > 0
     MEM --> FETCH: mem_wait_remaining == 0\n(LD writeback or ST complete)
@@ -131,10 +129,9 @@ stateDiagram-v2
 | Состояние | Локальные действия CU | Какие поля CU меняются |
 |---|---|---|
 | `IRQ_CHECK` | Проверка расписания IRQ, попытка входа в ISR | `pending_irq_values`, `irq_data_latch`, `in_interrupt`, `return_ip`, `ip` |
-| `FETCH` | Выборка `current_word` по `ip` | `current_instr_ip`, `current_word`, `phase` |
-| `DECODE` | Декодирование в `current_instr` и подготовка `next_ip` | `current_instr`, `next_ip`, `phase` |
+| `FETCH` | Выборка `current_word`, декодирование и подготовка `next_ip` | `current_instr_ip`, `current_word`, `current_instr`, `next_ip`, `phase` |
 | `EXEC` | Диспетчер по `opcode`, ALU/branch/IRET/TRAP | `regs`, `next_ip`, `last_trap`, `phase` |
-| `MEM` | Выполнение `LD/ST` с MMIO/cache, ожидание latency | `mem_kind`, `mem_addr`, `mem_wait_remaining`, `mem_initialized`, `mem_value_latch` |
+| `MEM` | Выполнение `LD/ST` через cache, ожидание latency | `mem_kind`, `mem_addr`, `mem_wait_remaining`, `mem_initialized`, `mem_value_latch` |
 | `HALT` | Остановка модели | `halted=True` |
 
 ## Управляющие условия переходов
@@ -142,6 +139,7 @@ stateDiagram-v2
 - `IRQ_CHECK -> IRQ_ENTER`: есть `pending_irq_values` и процессор не в ISR.
 - `EXEC -> MEM`: только для `LD`/`ST`.
 - `EXEC -> FETCH`: для всех немемориальных инструкций после `_complete_instruction()`.
+- `EXEC -> FETCH` для `LD/ST` в MMIO (fast-path, без `MEM`-ожидания).
 - `MEM -> MEM`: пока счетчик `mem_wait_remaining` не обнулился.
 - `MEM -> FETCH`: когда доступ завершен, для `LD` сначала запись в `regs[mem_rd]`.
 - `EXEC -> HALT`: при `HLT`.

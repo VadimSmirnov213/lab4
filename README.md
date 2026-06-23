@@ -2,11 +2,25 @@
 
 **Студент:** Смирнов Вадим Константинович  
 **Группа:** P3219  
+**Преподаватель:** *(укажите ФИО)*  
 **Вариант:**
 
 ```text
 asm | risc | neum | hw | tick | binary | trap | mem | cstr | prob1 | cache
 ```
+
+---
+
+Проект реализует полный учебный стек лабораторной №4: ассемблероподобный язык `asm`, транслятор в бинарный формат, и потактовую модель процессора `risc/neum/hw` с `trap`, `mem`-MMIO и `cache`. Цепочка работы: `source.asm -> assembler -> binary/listing -> CPU simulation -> output/log`.
+
+### Кратко (TL;DR)
+
+- Вход проекта: ASM-программа, опционально входной поток байт и расписание IRQ.
+- Выход транслятора: `words`, бинарник `.bin`, листинг `.lst`.
+- Выход симулятора: `output_buffer`, финальное состояние CPU/памяти, `TickLog`.
+- Модель CPU фазовая: `IRQ_CHECK -> FETCH(+DECODE) -> EXEC -> MEM`.
+- Кеш direct-mapped write-through, MMIO в адресном окне `0xFF00..0xFF02`.
+- Покрытие поведения подтверждается unit/integration/golden тестами.
 
 ---
 
@@ -159,6 +173,65 @@ golden/
 - Адресация: по индексу машинного слова.
 - Программа и данные размещаются транслятором в едином массиве слов с учетом `.org`.
 
+### Параметры модели памяти
+
+| Параметр | Значение |
+|---|---|
+| Тип памяти | Единая (Von Neumann, `neum`) |
+| Разрядность слова | 32 бита |
+| Единица адресации | 1 машинное слово |
+| Начальный адрес кода | `IP = 0` (или явно заданный тестом) |
+| Размещение секций | через линковку адресов в assembler (`.org`, метки, директивы данных) |
+
+### Раскладка памяти
+
+```text
+                 Registers
++------------------------------+
+| R0..R7 : general-purpose     |
+| IP     : program counter     |
+| return_ip, in_interrupt      |
+| tick, phase, mem_*           |
++------------------------------+
+
+      Unified memory (word-addressed)
++----------------------------------------------+
+| 0x0000 ...           : user code (.text)     |
+| .org relocated area  : code/data by assembler|
+| .data/.word/.asciiz  : constants and strings |
+| ...                                        ...|
+| 0xFF00               : MMIO_IN_DATA          |
+| 0xFF01               : MMIO_IN_STATUS        |
+| 0xFF02               : MMIO_OUT_DATA         |
++----------------------------------------------+
+```
+
+```mermaid
+flowchart TB
+    CPU["CPU\nregs, IP, tick, IRQ state"]
+    MEM["Unified word-addressed memory\n(code + data in one space)"]
+    MMIO["MMIO window\n0xFF00 IN_DATA\n0xFF01 IN_STATUS\n0xFF02 OUT_DATA"]
+    ASM["Assembler layout\nlabels/.org/.word/.asciiz"]
+
+    ASM --> MEM
+    CPU --> MEM
+    MEM --> CPU
+    CPU --> MMIO
+    MMIO --> CPU
+```
+
+### Отображение при компиляции и исполнении
+
+| Сущность | Где формируется | Где хранится/используется |
+|---|---|---|
+| Инструкции ASM | `translator/assembler.py` | единая память, область кода |
+| Метки (`label`) | `pass1_collect_labels` | адреса для `JMP/Bxx` и директив |
+| Константы (`.equ`) | `pass1_collect_labels` | подстановка в `imm`/директивы |
+| Данные (`.word`) | `assembler.emit` | единая память, адрес по `pc/.org` |
+| Строки (`.asciiz`) | `parse_cstr + emit` | последовательность слов + `0` |
+| Ввод/вывод | `CPU._read_mmio/_write_mmio` | окно MMIO `0xFF00..0xFF02` |
+| Кеш-линии | `simulator/cache.py` | runtime-буфер поверх backing memory |
+
 ### Memory-mapped I/O (`mem`)
 
 - `0xFF00` — `MMIO_IN_DATA`,
@@ -251,10 +324,32 @@ python -m src.ak_lab4.translator <input.asm> <output.bin> --listing <output.lst>
 
 Реализация: `src/ak_lab4/simulator/core.py`.
 
+### CLI
+
+```bash
+python -m src.ak_lab4.simulator <program.bin> --input <input.bin> --max-ticks 100000 --detailed-tick
+```
+
+| Аргумент/опция | Обязательность | Назначение |
+|---|---|---|
+| `program.bin` | да | бинарник машинного кода |
+| `--input file` | нет | входные байты для MMIO `IN_DATA` |
+| `--max-ticks N` | нет | лимит тактов (защита от бесконечного выполнения) |
+| `--detailed-tick` | нет | добавлять в лог микрофазы `PHASE_*` |
+
+### Выход симулятора
+
+| Поле | Где | Смысл |
+|---|---|---|
+| `output_buffer` | `CPU` | байты, записанные в `MMIO_OUT_DATA` |
+| `regs`, `ip`, `tick` | `CPU` | финальное состояние модели |
+| `logs: TickLog[]` | `CPU` | трасса исполнения по тактам и событиям |
+| `halted`, `last_trap` | `CPU` | статус завершения и trap-id |
+
 ### Общая логика
 
 - `hw` control unit (hardwired в коде исполнения инструкций);
-- цикл разбит на фазы `FETCH -> DECODE -> EXEC` (+ `MEM` для `LD/ST`);
+- цикл разбит на фазы `FETCH(+DECODE) -> EXEC` (+ `MEM` для не-MMIO `LD/ST`);
 - режим `tick`: один вызов `CPU.step()` соответствует ровно одному такту/фазе;
 - журнал исполнения хранится в `TickLog`.
 
@@ -281,26 +376,81 @@ python -m src.ak_lab4.translator <input.asm> <output.bin> --listing <output.lst>
 
 MMIO-доступы кеш не используют.
 
+#### Детализация кеша
+
+| Характеристика | Значение |
+|---|---|
+| Тип | direct-mapped |
+| Линия | `valid`, `tag`, `data` |
+| Индексация | `index = addr % lines_count` |
+| Тег | `tag = addr // lines_count` |
+| Политика записи | write-through |
+| Поведение на записи | попадание: обновить line + backing memory, промах: заполнить line + backing memory |
+
+Путь чтения в обычную память:
+
+1. `CPU` формирует `mem_addr`.
+2. `SimpleCache.read(addr)` проверяет `valid/tag`.
+3. При hit возвращается line data и ставится latency hit.
+4. При miss читается backing memory, линия перезаписывается, ставится latency miss.
+
+Путь записи в обычную память:
+
+1. `CPU` формирует `mem_addr` и `mem_value`.
+2. `SimpleCache.write(addr, value)` определяет hit/miss.
+3. Линия кеша обновляется по адресу.
+4. Значение всегда прокидывается в backing memory (write-through).
+
 ### Тактовая модель инструкций
 
 В текущей реализации `tick` считается на фазах, а не на «инструкции целиком»:
 
 - каждый тик начинается с проверки IRQ (`PHASE_IRQ_CHECK`);
-- немемориальные инструкции проходят `FETCH + DECODE + EXEC` (3 такта);
-- `LD`/`ST` дополнительно переходят в `MEM`-фазу с ожиданием памяти;
+- немемориальные инструкции проходят `FETCH(+DECODE) + EXEC` (2 такта);
+- `LD`/`ST` в обычную память дополнительно переходят в `MEM`-фазу с ожиданием памяти;
 - для обычной памяти в `MEM` применяется латентность кеша:
   - `CACHE_HIT`: `1` такт ожидания;
   - `CACHE_MISS`: `10` тактов ожидания;
-- MMIO (`0xFF00..0xFF02`) кеш обходят, но сохраняют фазу `MEM` (1 такт);
+- MMIO (`0xFF00..0xFF02`) кеш обходят и завершаются в `EXEC` (без отдельной `MEM`-фазы);
 - вход в прерывание (`IRQ_ENTER`) — отдельный такт с очисткой текущего pipeline-состояния и прыжком в вектор.
 
 Опционально поддержан подробный режим тактирования (`detailed_tick`): в журнал добавляются микрофазы `PHASE_IRQ_CHECK`, `PHASE_FETCH`, `PHASE_DECODE`, `PHASE_EXEC`, `PHASE_MEM`.
 
 Итого:
 
-- большинство инструкций (`ADD`, `SUB`, `ADDI`, `JMP`, `BEQ`, `TRAP`, `IRET`, и т.д.) — `3` такта;
-- `LD`/`ST` (обычная память): `4` такта при hit и `13` тактов при miss;
-- `LD`/`ST` (MMIO): `4` такта.
+- большинство инструкций (`ADD`, `SUB`, `ADDI`, `JMP`, `BEQ`, `TRAP`, `IRET`, и т.д.) — `2` такта;
+- `LD`/`ST` (обычная память): `3` такта при hit и `12` тактов при miss;
+- `LD`/`ST` (MMIO): `2` такта.
+
+#### Таблица тактов по инструкциям
+
+| Hex | Мнемоника | Такты | Фазы | Примечание |
+|---|---|---|---|---|
+| `0x00` | `HLT` | `2` | `FETCH(+DECODE), EXEC` | останов модели |
+| `0x01` | `ADD` | `2` | `FETCH(+DECODE), EXEC` | `rd <- rs1 + rs2` |
+| `0x02` | `SUB` | `2` | `FETCH(+DECODE), EXEC` | `rd <- rs1 - rs2` |
+| `0x03` | `LD` | `2 / 3 / 12` | `FETCH(+DECODE), EXEC[, MEM...]` | MMIO=`2`, cache hit=`3`, cache miss=`12` |
+| `0x04` | `ST` | `2 / 3 / 12` | `FETCH(+DECODE), EXEC[, MEM...]` | MMIO=`2`, cache hit=`3`, cache miss=`12` |
+| `0x05` | `BEQ` | `2` | `FETCH(+DECODE), EXEC` | ветвление при равенстве |
+| `0x06` | `JMP` | `2` | `FETCH(+DECODE), EXEC` | безусловный переход |
+| `0x07` | `TRAP` | `2` | `FETCH(+DECODE), EXEC` | запись `last_trap` |
+| `0x08` | `IRET` | `2` | `FETCH(+DECODE), EXEC` | возврат из ISR |
+| `0x09` | `ADDI` | `2` | `FETCH(+DECODE), EXEC` | `rd <- rs1 + imm` |
+| `0x0A` | `MUL` | `2` | `FETCH(+DECODE), EXEC` | умножение |
+| `0x0B` | `DIV` | `2` | `FETCH(+DECODE), EXEC` | ошибка при делителе `0` |
+| `0x0C` | `BNE` | `2` | `FETCH(+DECODE), EXEC` | ветвление при неравенстве |
+| `0x0D` | `BGT` | `2` | `FETCH(+DECODE), EXEC` | signed `>` |
+| `0x0E` | `MOD` | `2` | `FETCH(+DECODE), EXEC` | ошибка при делителе `0` |
+| `0x0F` | `AND` | `2` | `FETCH(+DECODE), EXEC` | побитовое И |
+| `0x10` | `OR` | `2` | `FETCH(+DECODE), EXEC` | побитовое ИЛИ |
+| `0x11` | `XOR` | `2` | `FETCH(+DECODE), EXEC` | побитовое XOR |
+| `0x12` | `SHL` | `2` | `FETCH(+DECODE), EXEC` | сдвиг влево |
+| `0x13` | `SHR` | `2` | `FETCH(+DECODE), EXEC` | сдвиг вправо |
+| `0x14` | `BLT` | `2` | `FETCH(+DECODE), EXEC` | signed `<` |
+| `0x15` | `BLE` | `2` | `FETCH(+DECODE), EXEC` | signed `<=` |
+| `0x16` | `BGE` | `2` | `FETCH(+DECODE), EXEC` | signed `>=` |
+
+Сервисное событие `IRQ_ENTER` добавляет отдельный такт (`+1`) в момент входа в обработчик прерывания.
 
 ### Схемы DataPath и ControlUnit
 
@@ -308,7 +458,7 @@ MMIO-доступы кеш не используют.
 
 ```mermaid
 flowchart LR
-    CU["Control Unit (FSM)\nphase: IRQ_CHECK/FETCH/DECODE/EXEC/MEM\nfields: next_ip, mem_kind, mem_wait_remaining,\nmem_initialized, in_interrupt, return_ip,\nirq_data_latch"]
+    CU["Control Unit (FSM)\nphase: IRQ_CHECK/FETCH(+DECODE)/EXEC/MEM\nfields: next_ip, mem_kind, mem_wait_remaining,\nmem_initialized, in_interrupt, return_ip,\nirq_data_latch"]
 
     PC["IP (Program Counter)"]
     IMEM["Unified Memory (instruction path)\n_fetch_word(addr)"]
@@ -380,12 +530,11 @@ stateDiagram-v2
 
     IRQ_ENTER --> FETCH: tick + ip=interrupt_vector_addr\nreturn_ip=old_ip\nflush current_word/current_instr/mem_state
 
-    FETCH --> DECODE: current_word = memory[ip]
-    DECODE --> EXEC: current_instr = decode(current_word)\nnext_ip = ip + 1
+    FETCH --> EXEC: current_word = memory[ip]\ncurrent_instr = decode(current_word)\nnext_ip = ip + 1
 
     EXEC --> HALT: opcode == HLT
     EXEC --> FETCH: ALU/branch/jmp/trap/iret complete
-    EXEC --> MEM: opcode in {LD, ST}
+    EXEC --> MEM: opcode in {LD, ST} && !MMIO
 
     MEM --> MEM: mem_wait_remaining > 0
     MEM --> FETCH: mem_wait_remaining == 0\n(LD writeback or ST complete)
@@ -413,19 +562,50 @@ stateDiagram-v2
 source.asm -> assembler -> binary/listing -> CPU run -> сравнение с expected
 ```
 
-Используются кейсы:
+#### Набор golden-тестов
 
-- `golden/hello`
-- `golden/cat`
-- `golden/hello_user_name`
-- `golden/sort`
-- `golden/double_precision`
-- `golden/prob1`
+1. `hello` -- вывод `Hello, World!`. Демонстрирует строковые литералы и порт вывода.
+
+2. `cat` -- echo-программа, читает ввод и печатает его обратно. Демонстрирует цикл и порт ввода.
+
+3. `hello_user_name` -- приветствие по введённому имени:
+
+   ```text
+   > What is your name?
+   < Alice
+   > Hello, Alice!
+   ```
+
+   Демонстрирует работу со строками и посимвольный ввод.
+
+4. `sort` -- сортировка списка чисел методом пузырька. Демонстрирует работу с массивом/памятью, парсинг чисел и вложенные циклы.
+
+5. `double_precision` -- демонстрация 64-битной арифметики на 32-битной модели.
+
+6. `prob1` -- решение задачи Эйлера №4 (наибольший палиндром-произведение двух трёхзначных чисел).
 
 Для каждого кейса сравниваются:
 
 - итоговый вывод (`expected_output.txt`);
 - репрезентативные строки трейса (`expected_trace_lines.txt`).
+
+Кратко по сценарию одного golden-кейса:
+
+1. читается `source.asm`;
+2. выполняется полная сборка (`assemble`) и формируются артефакты;
+3. дополнительно проверяется корректность артефактов транслятора:
+   - `.bin` существует и имеет размер `len(words) * 4`,
+   - `.lst` существует и число строк совпадает с `listing_entries`;
+4. запускается CPU (опционально с `input_bytes`, `interrupt_schedule`, `interrupt_vector_addr`, `start_ip`, preset регистров);
+5. сравнивается:
+   - `output_buffer` против `expected_output.txt`,
+   - начальный фрагмент `TickLog` против `expected_trace_lines.txt`.
+
+Что это даёт:
+
+- проверяется не только “финальный текст на выходе”, но и корректность внутренней динамики исполнения;
+- фиксируется регрессия как в трансляторе, так и в симуляторе на одном интеграционном пайплайне;
+- покрываются сценарии с MMIO, `trap/IRQ`, ветвлениями, кэшем и алгоритмом варианта (`prob1`).
 
 ### Запуск
 
@@ -433,7 +613,7 @@ source.asm -> assembler -> binary/listing -> CPU run -> сравнение с ex
 .venv/bin/python -m pytest -q
 ```
 
-Текущее локальное состояние: `29 passed`.
+Текущее локальное состояние: `38 passed`.
 
 ---
 
