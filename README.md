@@ -304,6 +304,95 @@ MMIO-доступы кеш не используют.
 
 ### Схемы DataPath и ControlUnit
 
+#### DataPath
+
+```mermaid
+flowchart LR
+    CU["Control Unit (FSM)\nphase: IRQ_CHECK/FETCH/DECODE/EXEC/MEM\nfields: next_ip, mem_kind, mem_wait_remaining,\nmem_initialized, in_interrupt, return_ip,\nirq_data_latch"]
+
+    PC["IP (Program Counter)"]
+    IMEM["Unified Memory (instruction path)\n_fetch_word(addr)"]
+    IR["current_word\nInstruction Register"]
+    DEC["Decoder\ndecode(current_word) -> Instruction"]
+    INS["current_instr\n(opcode, rd, rs1, rs2, imm)"]
+    REG["Register File\nregs[0..7]"]
+    ALU["ALU / Branch Unit\nADD,SUB,MUL,DIV,MOD,AND,OR,XOR,SHL,SHR\n+Bxx signed compares"]
+    NIP["next_ip"]
+    DPATH["Address/Data path for LD/ST\nmem_addr, mem_value, mem_rd"]
+    MMIO["MMIO\nIN_DATA 0xFF00\nIN_STATUS 0xFF01\nOUT_DATA 0xFF02"]
+    CACHE["SimpleCache\nread/write + hit/miss"]
+    DMEM["Unified Memory (data path)\n_backing_read/_backing_write"]
+    WAIT["MEM wait counter\nmem_wait_remaining"]
+    WB["Writeback mux\nALU result / load value"]
+    OUT["output_buffer"]
+    INB["input_buffer / pending_irq_values"]
+    LOG["TickLog\n(opcode, regs, ip, tick)"]
+
+    PC --> IMEM
+    IMEM --> IR
+    IR --> DEC
+    DEC --> INS
+
+    INS --> REG
+    REG --> ALU
+    INS --> ALU
+    ALU --> NIP
+    NIP --> PC
+
+    REG --> DPATH
+    INS --> DPATH
+    DPATH --> MMIO
+    DPATH --> CACHE
+    CACHE --> DMEM
+    DMEM --> CACHE
+    MMIO --> INB
+    MMIO --> OUT
+    INB --> MMIO
+
+    MMIO --> WAIT
+    CACHE --> WAIT
+    WAIT --> WB
+    ALU --> WB
+    WB --> REG
+
+    CU -. pc_write/pc_src .-> PC
+    CU -. ir_latch .-> IR
+    CU -. decode_enable .-> DEC
+    CU -. reg_read/reg_write .-> REG
+    CU -. alu_op .-> ALU
+    CU -. mem_read/mem_write .-> DPATH
+    CU -. mmio_select/cache_select .-> MMIO
+    CU -. mmio_select/cache_select .-> CACHE
+    CU -. wait_control .-> WAIT
+    CU -. wb_select .-> WB
+    CU -. irq_enter/iret_control .-> NIP
+    CU -. log_control .-> LOG
+```
+
+#### Control Unit (FSM)
+
+```mermaid
+stateDiagram-v2
+    [*] --> IRQ_CHECK
+
+    IRQ_CHECK --> IRQ_ENTER: pending_irq && !in_interrupt
+    IRQ_CHECK --> FETCH: otherwise
+
+    IRQ_ENTER --> FETCH: tick + ip=interrupt_vector_addr\nreturn_ip=old_ip\nflush current_word/current_instr/mem_state
+
+    FETCH --> DECODE: current_word = memory[ip]
+    DECODE --> EXEC: current_instr = decode(current_word)\nnext_ip = ip + 1
+
+    EXEC --> HALT: opcode == HLT
+    EXEC --> FETCH: ALU/branch/jmp/trap/iret complete
+    EXEC --> MEM: opcode in {LD, ST}
+
+    MEM --> MEM: mem_wait_remaining > 0
+    MEM --> FETCH: mem_wait_remaining == 0\n(LD writeback or ST complete)
+
+    HALT --> [*]
+```
+
 
 
 ## Тестирование
